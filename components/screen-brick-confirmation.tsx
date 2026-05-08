@@ -321,6 +321,38 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
             const allSelected = cardSelected.size === SAMPLE_UNCERTAIN_GTINS.length
             const someSelected = cardSelected.size > 0
 
+            // Live count: how many sample GTINs are still unassigned (scales to total)
+            const sampleUnassigned = SAMPLE_UNCERTAIN_GTINS.length - assignedCount
+            const scaledUnassigned = Math.max(
+              0,
+              Math.round((sampleUnassigned / SAMPLE_UNCERTAIN_GTINS.length) * cat.gtinCount)
+            )
+            // Build a live preview of tallies per assigned category
+            const liveTallies: Record<string, { name: string; count: number }> = {}
+            Object.values(cardAssignments).forEach((key) => {
+              if (!key) return
+              const [segId, brickCode] = key.split(":")
+              const opt = FALLBACK_SUB_OPTIONS[segId]?.find((o) => o.brickCode === brickCode)
+              if (!opt) return
+              if (!liveTallies[key]) {
+                // Scale sample counts to total GTIN count
+                liveTallies[key] = { name: opt.name, count: 0 }
+              }
+              liveTallies[key].count += 1
+            })
+            // Scale sample counts to total
+            const totalSampleAssigned = Object.values(liveTallies).reduce((s, t) => s + t.count, 0)
+            const scaledTallies = Object.entries(liveTallies).map(([key, t], idx, arr) => {
+              if (totalSampleAssigned === 0) return { key, name: t.name, scaledCount: 0 }
+              if (idx === arr.length - 1) {
+                const sumSoFar = arr.slice(0, idx).reduce((s, [, t2]) => {
+                  return s + Math.round((t2.count / totalSampleAssigned) * cat.gtinCount)
+                }, 0)
+                return { key, name: t.name, scaledCount: cat.gtinCount - sumSoFar - scaledUnassigned }
+              }
+              return { key, name: t.name, scaledCount: Math.round((t.count / totalSampleAssigned) * (cat.gtinCount - scaledUnassigned)) }
+            })
+
             return (
               <div
                 key={cat.id}
@@ -331,14 +363,40 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                 <div className="flex items-start gap-2 mb-3">
                   <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
-                      Help us confirm the product type for {cat.gtinCount} GTINs
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
+                        Help us confirm the product type
+                      </h3>
+                      {/* Live count badge — decreases as GTINs are assigned */}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[#fef3c7] text-[#92400e] border border-[#fcd34d] tabular-nums transition-all duration-200">
+                        {scaledUnassigned} GTINs remaining
+                      </span>
+                    </div>
                     <p className="text-[12px] text-[#6b7280] mt-0.5">
                       To suggest the right attributes, we need to know what type of product this is. Based on your submission, here are the closest matches — select the one that fits.
                     </p>
                   </div>
                 </div>
+                
+                {/* Live preview of category tallies when in individual mode and some are assigned */}
+                {picker.mode === "individual" && scaledTallies.length > 0 && (
+                  <div className="mb-3 p-2.5 rounded border border-[#d1fae5] bg-[#ecfdf5] flex items-center gap-3 flex-wrap">
+                    <span className="text-[11px] font-semibold text-[#047857]">Assigned so far:</span>
+                    {scaledTallies.filter(t => t.scaledCount > 0).map((t) => (
+                      <span key={t.key} className="inline-flex items-center gap-1 text-[11px] text-[#065f46] bg-[#d1fae5] px-2 py-0.5 rounded-full">
+                        <span className="font-semibold">{t.scaledCount}</span>
+                        <span className="text-[#047857]">GTINs →</span>
+                        <span>{t.name}</span>
+                      </span>
+                    ))}
+                    {scaledUnassigned > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-[#92400e] bg-[#fef3c7] px-2 py-0.5 rounded-full">
+                        <span className="font-semibold">{scaledUnassigned}</span>
+                        <span>unassigned</span>
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Step 1 (quick pick): Segment tiles */}
                 {picker.mode === "quick" && !picker.segmentId && (
@@ -355,8 +413,8 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                         </button>
                       ))}
                     </div>
-                    {/* Escape hatch: mixed groups need per-GTIN assignment */}
-                    <div className="mt-3 pt-3 border-t border-[#fde68a]">
+                    {/* Assign all at once shortcut */}
+                    <div className="mt-3 pt-3 border-t border-[#fde68a] flex items-center justify-between gap-3 flex-wrap">
                       <button
                         onClick={() => openIndividual(cat.id)}
                         className="inline-flex items-center gap-1.5 text-[12px] text-[#1a5fa6] font-medium hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] rounded"
@@ -520,8 +578,14 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                         + {cat.gtinCount - SAMPLE_UNCERTAIN_GTINS.length} more GTINs will be categorized using the same pattern.
                       </p>
                       <div className="flex items-center gap-2">
-                        <p className="text-[12px] text-[#374151]">
-                          {assignedCount} of {SAMPLE_UNCERTAIN_GTINS.length} assigned
+                        <p className="text-[12px] text-[#374151] tabular-nums">
+                          <span className={assignedCount === SAMPLE_UNCERTAIN_GTINS.length ? "text-[#047857] font-semibold" : "text-[#374151]"}>
+                            {assignedCount}
+                          </span>
+                          {" "}of {SAMPLE_UNCERTAIN_GTINS.length} assigned
+                          {scaledUnassigned > 0 && (
+                            <span className="ml-1.5 text-[#92400e]">({scaledUnassigned} GTINs remaining)</span>
+                          )}
                         </p>
                         <button
                           onClick={() => saveIndividualAssignments(cat.id)}
@@ -529,7 +593,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                           className="px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32]"
                           style={{ backgroundColor: "#2e7d32" }}
                         >
-                          Save Assignments
+                          Save &amp; Apply to All {cat.gtinCount} GTINs
                         </button>
                       </div>
                     </div>
