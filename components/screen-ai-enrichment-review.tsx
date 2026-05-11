@@ -604,9 +604,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setShowConfirmDialog(false)
   }
 
-  // Derive a list of ONLY attributes with low-confidence GTINs (< 70%) that are still PENDING.
+  // Derive a list of ONLY attributes with low-confidence GTINs (< 70%) that are still PENDING,
+  // AND that the user has actually engaged with (expanded to view).
   // Once reviewed (confirmed/edited/rejected), they no longer need attention.
   const attributesWithLowConfidence = attributeGroups
+    .filter((g) => expandedAttributes.has(g.attributeName)) // Only show attributes user has expanded
     .map((g) => {
       // Only count low-confidence items that are still pending (not yet reviewed)
       const pendingLowConfidenceGtins = g.gtins.filter(
