@@ -101,6 +101,12 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
   const [bulkSelected, setBulkSelected] = useState<Record<string, Set<string>>>({})
   // Bulk-apply dropdown value per card
   const [bulkValue, setBulkValue] = useState<Record<string, string>>({})
+  // Track whether "Confirm All" batch action was used (enables batch undo)
+  const [batchConfirmed, setBatchConfirmed] = useState(false)
+  // Snapshot of which category ids were confirmed before the batch action (for precise undo)
+  const [preConfirmAllSnapshot, setPreConfirmAllSnapshot] = useState<Set<string>>(new Set())
+  // Track which single category the user has selected to enrich (so it can be unselected)
+  const [selectedEnrichId, setSelectedEnrichId] = useState<string | null>(null)
 
   const confirmedList = categories.filter((c) => c.confirmed)
   const confirmedCount = confirmedList.length
@@ -114,14 +120,46 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
     ? `${sourceContext.codes[0]} ${sourceContext.metadata[sourceContext.codes[0]]?.description ?? ""}`.trim()
     : ""
 
-  const handleConfirmCategory = (id: string) =>
+  const handleConfirmCategory = (id: string) => {
+    setBatchConfirmed(false) // individual confirm — clear batch state
     setCategories((prev) => prev.map((cat) => (cat.id === id ? { ...cat, confirmed: true } : cat)))
+  }
 
-  const handleConfirmAll = () =>
+  // Undo a single category confirmation
+  const handleUnconfirmCategory = (id: string) => {
+    setBatchConfirmed(false)
+    setSelectedEnrichId((prev) => (prev === id ? null : prev))
+    setCategories((prev) => prev.map((cat) => (cat.id === id ? { ...cat, confirmed: false } : cat)))
+  }
+
+  const handleConfirmAll = () => {
+    // Snapshot which categories are already confirmed so we can restore exactly those on undo
+    const alreadyConfirmedIds = new Set(categories.filter((c) => c.confirmed).map((c) => c.id))
+    setPreConfirmAllSnapshot(alreadyConfirmedIds)
+    setBatchConfirmed(true)
     // Only auto-confirm categories that AI has resolved (>= 70). Uncertain ones still require a manual pick.
     setCategories((prev) => prev.map((cat) => (cat.confidence >= 70 ? { ...cat, confirmed: true } : cat)))
+  }
 
+  // Undo the batch "Confirm All" — restore only the categories that weren't confirmed before
+  const handleUndoConfirmAll = () => {
+    setCategories((prev) =>
+      prev.map((cat) =>
+        preConfirmAllSnapshot.has(cat.id) ? cat : { ...cat, confirmed: false }
+      )
+    )
+    setBatchConfirmed(false)
+    setPreConfirmAllSnapshot(new Set())
+    setSelectedEnrichId(null)
+  }
+
+  // Single-category enrich: mark it as selected (highlighted), can be unselected
   const handleEnrichSingle = (cat: BrickCategory) => {
+    if (selectedEnrichId === cat.id) {
+      setSelectedEnrichId(null)
+      return
+    }
+    setSelectedEnrichId(cat.id)
     const toEnrich: ConfirmedCategory[] = [{ id: cat.id, name: cat.name, gtinCount: cat.gtinCount, confidence: cat.confidence }]
     onProceedToEnrichment(toEnrich)
   }
@@ -669,14 +707,38 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                       Confirm Category
                     </button>
                   ) : (
-                    <button
-                      onClick={() => handleEnrichSingle(cat)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                      style={{ backgroundColor: "#2e7d32" }}
-                    >
-                      Enrich This Category
-                      <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Undo confirm — restores the card to unconfirmed state */}
+                      <button
+                        onClick={() => handleUnconfirmCategory(cat.id)}
+                        className="px-2.5 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6b7280]"
+                        title="Undo category confirmation"
+                      >
+                        Undo Confirm
+                      </button>
+                      {/* Enrich button: active when selected, outline when not */}
+                      <button
+                        onClick={() => handleEnrichSingle(cat)}
+                        className={`flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32] ${
+                          selectedEnrichId === cat.id
+                            ? "text-white bg-[#2e7d32] hover:bg-[#1b5e20]"
+                            : "text-[#2e7d32] border-2 border-[#2e7d32] bg-white hover:bg-[#f0fdf4]"
+                        }`}
+                        aria-pressed={selectedEnrichId === cat.id}
+                      >
+                        {selectedEnrichId === cat.id ? (
+                          <>
+                            Enriching This Category
+                            <span className="text-[11px] font-normal ml-0.5 opacity-80">(Unselect)</span>
+                          </>
+                        ) : (
+                          <>
+                            Enrich This Category
+                            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -718,7 +780,16 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          {!allConfirmed && (
+          {batchConfirmed ? (
+            /* After "Confirm All" — offer undo of the batch action */
+            <button
+              onClick={handleUndoConfirmAll}
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#fef2f2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dc2626]"
+              style={{ borderColor: "#dc2626", color: "#dc2626" }}
+            >
+              Undo Confirm All
+            </button>
+          ) : !allConfirmed ? (
             <button
               onClick={handleConfirmAll}
               className="px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#f0f2f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
@@ -726,7 +797,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
             >
               Confirm All Categories
             </button>
-          )}
+          ) : null}
           {confirmedCount > 0 && (
             <button
               onClick={handleEnrichAll}

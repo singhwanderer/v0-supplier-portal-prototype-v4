@@ -571,7 +571,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
   // Filter and paginate GTINs for expanded view
   const getFilteredAndPaginatedGtins = (gtins: GTINAttribute[]) => {
-    let filtered = gtins
+    // When the low-confidence toggle is active, only show GTINs below 85% confidence
+    let filtered = showLowConfidenceOnly ? gtins.filter((g) => g.confidence < 85) : gtins
     
     // Default: sort low-confidence (<70%) first for immediate attention
     filtered.sort((a, b) => {
@@ -697,18 +698,29 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         >
           80%+
         </button>
-        <label className="ml-auto flex items-center gap-2 text-[12px] text-[#374151]">
-          <input
-            type="checkbox"
-            checked={showLowConfidenceOnly}
-            onChange={(e) => {
-              setShowLowConfidenceOnly(e.target.checked)
-              setCurrentPage(1)
-            }}
-            className="w-3 h-3 rounded border-[#d1d5db]"
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showLowConfidenceOnly}
+          onClick={() => {
+            setShowLowConfidenceOnly((prev) => !prev)
+            setCurrentPage(1)
+          }}
+          className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f59e0b] ${
+            showLowConfidenceOnly
+              ? "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
+              : "bg-white border-[#d1d5db] text-[#6b7280] hover:border-[#f59e0b] hover:text-[#92400e]"
+          }`}
+          title="Toggle to show only attributes and GTINs with AI confidence below 85%"
+        >
+          <span
+            className={`w-3 h-3 rounded-full border-2 transition-colors ${
+              showLowConfidenceOnly ? "bg-[#f59e0b] border-[#f59e0b]" : "bg-transparent border-[#9ca3af]"
+            }`}
+            aria-hidden="true"
           />
-          Show Low Confidence Only (&lt;85%)
-        </label>
+          Low Confidence Only (&lt;85%)
+        </button>
       </div>
 
       {/* Stats */}
@@ -817,7 +829,13 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               </th>
             </tr>
           </thead>
-          {attributeGroups.map((group) => {
+          {attributeGroups
+            // When the low-confidence filter is active, only show attribute rows where at least
+            // one GTIN has an AI confidence score below 85%.
+            .filter((group) =>
+              !showLowConfidenceOnly || group.gtins.some((g) => g.confidence < 85)
+            )
+            .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
               const confirmedCount = group.gtins.filter((g) => g.status === "confirmed" || g.status === "edited").length
               const avgConfidence = Math.round(
