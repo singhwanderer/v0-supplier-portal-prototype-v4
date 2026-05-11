@@ -229,7 +229,7 @@ interface GTINAttribute {
   aiSuggestion: string
   aiReasoning: string
   confidence: number
-  status: "pending" | "confirmed" | "edited"
+  status: "pending" | "confirmed" | "edited" | "rejected"
   userValue?: string
 }
 
@@ -485,7 +485,24 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         group.attributeName === attrName
           ? {
               ...group,
-              gtins: group.gtins.filter((g) => g.gtin !== gtin),
+              gtins: group.gtins.map((g) =>
+                g.gtin === gtin ? { ...g, status: "rejected" as const } : g
+              ),
+            }
+          : group
+      )
+    )
+  }
+
+  const undoRejectGtin = (attrName: string, gtin: string) => {
+    setAttributeGroups((prev) =>
+      prev.map((group) =>
+        group.attributeName === attrName
+          ? {
+              ...group,
+              gtins: group.gtins.map((g) =>
+                g.gtin === gtin ? { ...g, status: "pending", userValue: undefined } : g
+              ),
             }
           : group
       )
@@ -587,21 +604,21 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setShowConfirmDialog(false)
   }
 
-  // Derive a list of ONLY attributes with low-confidence GTINs (< 70%)
-  // High-confidence GTINs are auto-validated and don't need user review
+  // Derive a list of ONLY attributes with low-confidence GTINs (< 70%) that are still PENDING.
+  // Once reviewed (confirmed/edited/rejected), they no longer need attention.
   const attributesWithLowConfidence = attributeGroups
-    .filter((g) => g.gtins.some((gt) => gt.confidence < 70))
-    .slice(0, 4) // Limit to 3-4 attributes for clarity
     .map((g) => {
-      const lowConfidenceGtins = g.gtins.filter((gt) => gt.confidence < 70)
-      const autoValidatedGtins = g.gtins.filter((gt) => gt.confidence >= 70)
+      // Only count low-confidence items that are still pending (not yet reviewed)
+      const pendingLowConfidenceGtins = g.gtins.filter(
+        (gt) => gt.confidence < 70 && gt.status === "pending"
+      )
       return {
         attributeName: g.attributeName,
-        lowConfidenceCount: lowConfidenceGtins.length,
-        autoValidatedCount: autoValidatedGtins.length,
-        totalCount: g.gtins.length,
+        lowConfidenceCount: pendingLowConfidenceGtins.length,
       }
     })
+    .filter((row) => row.lowConfidenceCount > 0) // Only show if there are pending low-confidence items
+    .slice(0, 4) // Limit to 3-4 attributes for clarity
 
   const jumpToAttribute = (attrName: string) => {
     setShowConfirmDialog(false)
@@ -1008,6 +1025,21 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                           </button>
                                         </div>
                                       )}
+                                      {gtin.status === "rejected" && (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded bg-[#fee2e2] text-[#dc2626]">
+                                            <X className="w-3 h-3" />
+                                            Rejected
+                                          </span>
+                                          <button
+                                            onClick={() => undoRejectGtin(group.attributeName, gtin.gtin)}
+                                            className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
+                                            title="Undo rejection"
+                                          >
+                                            Undo
+                                          </button>
+                                        </div>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -1093,7 +1125,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 key={row.attributeName}
                 onClick={() => jumpToAttribute(row.attributeName)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded border border-[#fed7aa] bg-white text-[#b45309] hover:bg-[#fffbf0] transition-colors"
-                title={`${row.lowConfidenceCount} need review, ${row.autoValidatedCount} confirmed`}
+                title={`${row.lowConfidenceCount} items need review`}
               >
                 <span className="font-medium">{row.attributeName}</span>
                 <span className="text-[11px] text-[#d97706] bg-[#fef5e7] px-1.5 py-0.5 rounded-full">

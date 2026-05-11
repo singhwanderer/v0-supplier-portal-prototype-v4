@@ -197,37 +197,32 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
     setBulkValue((prev) => ({ ...prev, [cardId]: "" }))
   }
 
-  // Save individual assignments: split the uncertain card into multiple confirmed cards
+  // Save individual assignments: move assigned GTINs to confirmed categories while keeping the
+  // uncertain card alive (with reduced count) until ALL GTINs are resolved.
   const saveIndividualAssignments = (cardId: string) => {
     const card = categories.find((c) => c.id === cardId)
     if (!card) return
     const cardAssignments = assignments[cardId] ?? {}
-    const assigned = Object.values(cardAssignments).filter((v): v is string => Boolean(v))
-    if (assigned.length === 0) return
+    const assignedGtins = Object.entries(cardAssignments).filter(([, v]) => Boolean(v))
+    if (assignedGtins.length === 0) return
 
     // Count GTINs per (segmentId:brickCode)
     const counts: Record<string, number> = {}
-    assigned.forEach((key) => { counts[key] = (counts[key] ?? 0) + 1 })
+    assignedGtins.forEach(([, key]) => { counts[key as string] = (counts[key as string] ?? 0) + 1 })
 
     const keys = Object.keys(counts)
-    const totalAssigned = assigned.length
+    const totalAssigned = assignedGtins.length
+    const remainingCount = card.gtinCount - totalAssigned
 
-    // Scale sample-based counts to the card's total GTIN count; last key absorbs any rounding residual.
+    // Build new confirmed category cards for the assigned GTINs
     const newCategories: BrickCategory[] = keys.map((key, idx) => {
       const [segmentId, brickCode] = key.split(":")
       const option = FALLBACK_SUB_OPTIONS[segmentId].find((o) => o.brickCode === brickCode)!
-      let scaledCount: number
-      if (idx === keys.length - 1) {
-        const sumSoFar = keys.slice(0, idx).reduce((s, k) => s + Math.round((counts[k] / totalAssigned) * card.gtinCount), 0)
-        scaledCount = card.gtinCount - sumSoFar
-      } else {
-        scaledCount = Math.round((counts[key] / totalAssigned) * card.gtinCount)
-      }
       return {
-        id: `${cardId}-split-${idx}`,
+        id: `${cardId}-split-${Date.now()}-${idx}`,
         name: option.name,
         brickCode: option.brickCode,
-        gtinCount: scaledCount,
+        gtinCount: counts[key],
         confidence: 100,
         confirmed: true,
       }
@@ -237,13 +232,39 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
       const idx = prev.findIndex((c) => c.id === cardId)
       if (idx === -1) return prev
       const next = [...prev]
-      next.splice(idx, 1, ...newCategories)
+
+      if (remainingCount > 0) {
+        // Keep uncertain card alive with reduced count; insert new categories after it
+        next[idx] = { ...card, gtinCount: remainingCount }
+        next.splice(idx + 1, 0, ...newCategories)
+      } else {
+        // All GTINs resolved — replace the uncertain card entirely
+        next.splice(idx, 1, ...newCategories)
+        // Clean up picker state since card is gone
+        setPickerState((p) => { const n = { ...p }; delete n[cardId]; return n })
+      }
       return next
     })
-    setPickerState((prev) => { const next = { ...prev }; delete next[cardId]; return next })
-    setAssignments((prev) => { const next = { ...prev }; delete next[cardId]; return next })
-    setBulkSelected((prev) => { const next = { ...prev }; delete next[cardId]; return next })
-    setBulkValue((prev) => { const next = { ...prev }; delete next[cardId]; return next })
+
+    // Clear out saved assignments for the GTINs that were just resolved
+    setAssignments((prev) => {
+      const remaining: Assignments = {}
+      Object.entries(prev[cardId] ?? {}).forEach(([g, v]) => {
+        if (!v) remaining[g] = v // keep unassigned GTINs
+      })
+      if (remainingCount > 0) return { ...prev, [cardId]: remaining }
+      const next = { ...prev }
+      delete next[cardId]
+      return next
+    })
+    setBulkSelected((prev) => {
+      if (remainingCount > 0) return { ...prev, [cardId]: new Set() }
+      const next = { ...prev }; delete next[cardId]; return next
+    })
+    setBulkValue((prev) => {
+      if (remainingCount > 0) return { ...prev, [cardId]: "" }
+      const next = { ...prev }; delete next[cardId]; return next
+    })
   }
 
   return (
