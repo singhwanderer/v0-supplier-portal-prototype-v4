@@ -351,10 +351,14 @@ function generateAttributeData(code: string, gtinCount: number, description: str
       const reasoning = reasoningFn ? reasoningFn(g.productDesc, g.gtin) : "AI analysis of product data"
 
       // First `lowConfidenceSlots` GTINs get a sub-70 confidence score; the rest are high confidence.
+      // Within low-confidence, the first slot always falls below 60 (suppressed suggestion),
+      // and remaining low-confidence slots land in the 61–69 range (shown with flag).
       const isLowConfidenceGtin = index < lowConfidenceSlots
       const confidence = isLowConfidenceGtin
-        ? Math.floor(52 + Math.random() * 16)   // 52–67 — genuinely uncertain
-        : Math.floor(82 + Math.random() * 18)   // 82–99 — confidently validated
+        ? index === 0
+          ? Math.floor(40 + Math.random() * 20)  // 40–59 — below threshold, suggestion suppressed
+          : Math.floor(61 + Math.random() * 8)   // 61–68 — low confidence, shown with flag
+        : Math.floor(82 + Math.random() * 18)    // 82–99 — confidently validated
 
       return {
         gtin: g.gtin,
@@ -406,7 +410,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         group.attributeName === attrName
           ? {
               ...group,
-              gtins: group.gtins.map((g) => (g.status === "pending" ? { ...g, status: "confirmed" } : g)),
+              // Skip GTINs that are suppressed (confidence < 60 and no user-entered value) —
+              // those require the user to enter a value before they can be confirmed.
+              gtins: group.gtins.map((g) => {
+                const isSuppressed = g.confidence < 60 && g.status !== "edited"
+                return g.status === "pending" && !isSuppressed ? { ...g, status: "confirmed" } : g
+              }),
             }
           : group
       )
@@ -911,7 +920,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                             onClick={() => confirmAllForAttribute(group.attributeName)}
                             className="px-3 py-1.5 text-[12px] font-semibold text-white rounded bg-[#1a5fa6] hover:bg-[#1a4f8c] transition-colors whitespace-nowrap"
                           >
-                            Confirm All ({group.gtins.filter(g => g.status === "pending").length})
+                            Confirm All ({group.gtins.filter(g => g.status === "pending" && !(g.confidence < 60)).length})
                           </button>
                         )}
                       </div>
@@ -939,16 +948,24 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         
                         {items.map((gtin) => {
                           const isEditing = editingGtin?.attribute === group.attributeName && editingGtin.gtin === gtin.gtin
-                          const displayValue = gtin.status === "edited" ? gtin.userValue! : gtin.aiSuggestion
+                          // Below 60%: suggestion is suppressed — show N/A unless user has provided their own value
+                          const isSuppressed = gtin.confidence < 60 && gtin.status !== "edited"
+                          const displayValue = gtin.status === "edited"
+                            ? gtin.userValue!
+                            : isSuppressed
+                              ? "N/A"
+                              : gtin.aiSuggestion
                           const isLowConfidence = gtin.confidence < 70
 
                           return (
                             <tr
                               key={`${group.attributeName}-${gtin.gtin}`}
                               className={`border-b ${
-                                isLowConfidence 
-                                  ? "border-[#fed7aa] bg-[#fef5e7]" 
-                                  : "border-[#f3f4f6] bg-[#fafbfc]"
+                                isSuppressed
+                                  ? "border-[#fecaca] bg-[#fff5f5]"
+                                  : isLowConfidence
+                                    ? "border-[#fed7aa] bg-[#fef5e7]"
+                                    : "border-[#f3f4f6] bg-[#fafbfc]"
                               } ${
                                 gtin.status === "confirmed" || gtin.status === "edited" ? "opacity-70" : ""
                               }`}
@@ -969,6 +986,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                     onSave={saveEdit}
                                     onCancel={cancelEdit}
                                   />
+                                ) : isSuppressed ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
+                                    <span className="text-[10px] text-[#dc2626]">Below confidence threshold</span>
+                                  </div>
                                 ) : (
                                   <span className="text-[12px] font-semibold text-[#1a1f2e]">{displayValue}</span>
                                 )}
@@ -978,13 +1000,22 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                   <div className="flex items-center justify-center gap-1.5">
                                     <div className="w-10 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
                                       <div
-                                        className={`h-full transition-all ${gtin.confidence >= 90 ? "bg-[#2e7d32]" : gtin.confidence >= 80 ? "bg-[#f59e0b]" : "bg-[#dc2626]"}`}
+                                        className={`h-full transition-all ${
+                                          gtin.confidence >= 90 ? "bg-[#2e7d32]"
+                                          : gtin.confidence >= 80 ? "bg-[#f59e0b]"
+                                          : gtin.confidence >= 60 ? "bg-[#dc2626]"
+                                          : "bg-[#9ca3af]"
+                                        }`}
                                         style={{ width: `${gtin.confidence}%` }}
                                       />
                                     </div>
-                                    <span className="text-[11px] font-medium text-[#6b7280]">{gtin.confidence}%</span>
+                                    <span className={`text-[11px] font-medium ${gtin.confidence < 60 ? "text-[#9ca3af]" : "text-[#6b7280]"}`}>
+                                      {gtin.confidence}%
+                                    </span>
                                   </div>
-                                  <p className="text-[9px] text-[#9ca3af] text-center italic truncate" title={gtin.aiReasoning}>{gtin.aiReasoning}</p>
+                                  <p className="text-[9px] text-[#9ca3af] text-center italic truncate" title={gtin.aiReasoning}>
+                                    {isSuppressed ? "Confidence too low to suggest a value" : gtin.aiReasoning}
+                                  </p>
                                 </div>
                               </td>
                               <td className="px-3 py-2.5 text-center">
@@ -1010,17 +1041,25 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                     <>
                                       {gtin.status === "pending" && (
                                         <div className="flex items-center justify-center gap-1.5">
+                                          {/* Confirm is suppressed when confidence < 60 and no user value exists */}
+                                          {!isSuppressed && (
+                                            <button
+                                              onClick={() => confirmSingleGtin(group.attributeName, gtin.gtin)}
+                                              className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#1a5fa6] hover:bg-[#1a4f8c] transition-colors"
+                                            >
+                                              Confirm
+                                            </button>
+                                          )}
                                           <button
-                                            onClick={() => confirmSingleGtin(group.attributeName, gtin.gtin)}
-                                            className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#1a5fa6] hover:bg-[#1a4f8c] transition-colors"
+                                            onClick={() => startEdit(group.attributeName, gtin.gtin, isSuppressed ? "" : gtin.aiSuggestion)}
+                                            className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                                              isSuppressed
+                                                ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
+                                                : "border border-[#6b7280] text-[#374151] hover:bg-[#f3f4f6]"
+                                            }`}
+                                            title={isSuppressed ? "Enter a value manually to enable confirmation" : undefined}
                                           >
-                                            Confirm
-                                          </button>
-                                          <button
-                                            onClick={() => startEdit(group.attributeName, gtin.gtin, gtin.aiSuggestion)}
-                                            className="px-2 py-1 text-[11px] font-medium border border-[#6b7280] text-[#374151] rounded hover:bg-[#f3f4f6] transition-colors"
-                                          >
-                                            Edit
+                                            {isSuppressed ? "Enter Value" : "Edit"}
                                           </button>
                                           <button
                                             onClick={() => rejectGtin(group.attributeName, gtin.gtin)}
