@@ -1215,7 +1215,6 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 </div>
               )}
 
-              <p className="text-[12px] text-[#9ca3af]">This action cannot be undone.</p>
             </div>
             <div className="px-6 py-4 bg-[#f9fafb] border-t border-[#e5e7eb] flex items-center justify-between gap-3">
               <button
