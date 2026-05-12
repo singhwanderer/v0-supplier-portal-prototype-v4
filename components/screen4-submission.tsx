@@ -12,7 +12,7 @@ interface Screen4Props {
 const PREVIEW_ROWS = [
   { gtin: "0888546413183", attribute: "Closure Type",     value: "Lace-up",    status: "confirmed" },
   { gtin: "0888546413183", attribute: "Upper Material",   value: "Suede/Mesh", status: "confirmed" },
-  { gtin: "0888546413183", attribute: "Toe Shape",        value: "Round",      status: "confirmed" },
+  { gtin: "0888546413183", attribute: "Faux Fur",         value: "No",         status: "confirmed" },
   { gtin: "0888546413183", attribute: "Sole Material",    value: "Rubber",     status: "confirmed" },
   { gtin: "0736654122091", attribute: "Closure Type",     value: "Zip",        status: "confirmed" },
   { gtin: "0736654122091", attribute: "Upper Material",   value: "Leather",    status: "confirmed" },

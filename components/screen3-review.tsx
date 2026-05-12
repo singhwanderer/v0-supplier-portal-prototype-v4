@@ -31,7 +31,7 @@ const ATTR_TEMPLATES: Record<string, AttrRow[]> = {
   "1": [
     { attribute: "Closure Type",   aiValue: "Lace-up",    confidence: 98, reason: '"lace-up" in description',          status: "confirmed" },
     { attribute: "Upper Material", aiValue: "Suede/Mesh", confidence: 95, reason: '"suede" and "mesh" in description', status: "confirmed" },
-    { attribute: "Toe Shape",      aiValue: "Round",      confidence: 97, reason: "matched to ankle boot profile",     status: "confirmed" },
+    { attribute: "Faux Fur",       aiValue: "No",         confidence: 97, reason: "no fur/faux fur in material list",  status: "confirmed" },
     { attribute: "Sole Material",  aiValue: "Rubber",     confidence: 82, reason: "common for this boot type",         status: "pending"   },
   ],
   "2": [

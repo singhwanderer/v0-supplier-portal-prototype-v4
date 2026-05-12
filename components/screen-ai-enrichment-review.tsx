@@ -87,11 +87,9 @@ const CODE_LIST_VALUES: Record<string, { label: string; code: string }[]> = {
     { label: "Synthetic", code: "GM03FABSY" },
     { label: "Textile",   code: "GM03FABTE" },
   ],
-  "Toe Shape": [
-    { label: "Almond",  code: "GM03TOEAL" },
-    { label: "Pointed", code: "GM03TOEPO" },
-    { label: "Round",   code: "GM03TOERO" },
-    { label: "Square",  code: "GM03TOESQ" },
+  "Faux Fur": [
+    { label: "Yes", code: "GM03FFYES" },
+    { label: "No",  code: "GM03FFNO"  },
   ],
 }
 
@@ -337,22 +335,22 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
 
 // Reasoning patterns keyed to attribute names.
 // User-facing: only the product category matters; the underlying taxonomy is not surfaced.
+// Prompt 2: Removed Advertised Origin and Toe Shape, added Faux Fur
 const reasoningPatterns: Record<string, (desc: string, gtin: string) => string> = {
   "Brand Name":              () => "Extracted from product title",
-  "Advertised Origin":       () => "Inferred from supplier metadata",
-  "Care Instructions Code":  () => "Matched to standard care label codes",
+  "Care Instructions":       () => "Matched to standard care label codes",
   "Closure":                 (desc) => desc.toLowerCase().includes("lace") ? '"lace-up" found in description' : "Common closure for this category",
   "Country of Origin":       () => "Sourced from product data",
   "Fabric or Material Code": (desc) => desc.toLowerCase().includes("suede") ? '"suede" detected in title' : "Inferred from product image analysis",
-  "Faux Fur":                () => "No fur indicators in description",
+  "Faux Fur":                () => "Checked material content for fur/faux fur",
   "Gender":                  () => "Inferred from product title and category",
   "Heel Height":             () => "Estimated from product measurements",
   "Lining Material":         () => "Inferred from category norms",
   "Open/Closed Toe":         (desc) => desc.toLowerCase().includes("sandal") ? "Open toe for sandals" : "Standard for this shoe type",
   "Shoe Type":               () => "Derived from product category",
-  "Sole Type":               () => "Inferred from category and price tier",
-  "Toe Shape":               () => "Matched to product image analysis",
-  "Toe Style":               () => "Common style for this category",
+  "Sole Material":           () => "Inferred from category and price tier",
+  "Upper Material":          (desc) => desc.toLowerCase().includes("suede") ? '"suede" found in description' : "Material inferred from product data",
+  "Waterproof":              () => "Checked product description for water resistance claims",
 }
 
 // Footwear attribute applicability table.
@@ -366,22 +364,40 @@ interface FootwearAttributeDef {
   appliesTo: ("10001077" | "10001076" | "10001070")[]
 }
 
-// Change 3: Removed "Advertised Origin" — now 14 attributes total
+// Prompt 2: Exact attribute list from specification — 14 attributes, no Advertised Origin, no Toe Shape
+const ATTRIBUTES = [
+  { name: "Brand Name", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
+  { name: "Care Instructions", productsApplicable: 108, avgConfidence: 0.90, needsReview: false },
+  { name: "Closure", productsApplicable: 112, avgConfidence: 0.90, needsReview: true },
+  { name: "Country of Origin", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
+  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.90, needsReview: true },
+  { name: "Faux Fur", productsApplicable: 85, avgConfidence: 0.90, needsReview: false },
+  { name: "Gender", productsApplicable: 102, avgConfidence: 0.90, needsReview: false },
+  { name: "Heel Height", productsApplicable: 110, avgConfidence: 0.90, needsReview: false },
+  { name: "Lining Material", productsApplicable: 96, avgConfidence: 0.90, needsReview: false },
+  { name: "Open/Closed Toe", productsApplicable: 105, avgConfidence: 0.90, needsReview: false },
+  { name: "Shoe Type", productsApplicable: 88, avgConfidence: 0.91, needsReview: false },
+  { name: "Sole Material", productsApplicable: 92, avgConfidence: 0.89, needsReview: false },
+  { name: "Upper Material", productsApplicable: 118, avgConfidence: 0.88, needsReview: true },
+  { name: "Waterproof", productsApplicable: 75, avgConfidence: 0.92, needsReview: false },
+]
+
+// FOOTWEAR_ATTRIBUTES for attribute suggestions and brick mapping
 const FOOTWEAR_ATTRIBUTES: FootwearAttributeDef[] = [
-  { name: "Brand Name",                         suggestions: ["Nike", "Adidas", "New Balance", "Clarks", "Timberland"],   appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Care Instructions",                  suggestions: ["Wipe Clean", "Spot Clean", "Machine Wash", "Hand Wash"],   appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Closure",                            suggestions: ["Lace-up", "Zip", "Slip-on", "Velcro", "Buckle"],           appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Country of Origin",                  suggestions: ["China", "Vietnam", "India", "Indonesia"],                  appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Fabric or Material Code",            suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Textile"],      appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Gender",                             suggestions: ["Men", "Women", "Unisex", "Boys", "Girls"],                 appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Heel Height",                        suggestions: ["Flat", "Low (<1in)", "Mid (1–2in)", "High (2–3in)"],       appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Lining Material",                    suggestions: ["Leather", "Textile", "Mesh", "Synthetic"],                 appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Open/Closed Toe",                    suggestions: ["Open Toe", "Closed Toe"],                                  appliesTo: ["10001077", "10001076"] },
-  { name: "Shoe Type",                          suggestions: ["Sneaker", "Loafer", "Oxford", "Ankle Boot", "Running"],    appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Sole Material",                      suggestions: ["Rubber", "EVA", "PU", "Leather"],                          appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Toe Shape",                          suggestions: ["Round", "Square", "Pointed", "Almond"],                    appliesTo: ["10001077", "10001076"] },
-  { name: "Upper Material",                     suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Mesh"],         appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Waterproof",                         suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Brand Name",              suggestions: ["Nike", "Adidas", "New Balance", "Clarks", "Timberland"],   appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Care Instructions",       suggestions: ["Wipe Clean", "Spot Clean", "Machine Wash", "Hand Wash"],   appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Closure",                 suggestions: ["Lace-up", "Zip", "Slip-on", "Velcro", "Buckle"],           appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Country of Origin",       suggestions: ["China", "Vietnam", "India", "Indonesia"],                  appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Fabric or Material Code", suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Textile"],      appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Faux Fur",                suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Gender",                  suggestions: ["Men", "Women", "Unisex", "Boys", "Girls"],                 appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Heel Height",             suggestions: ["Flat", "Low (<1in)", "Mid (1–2in)", "High (2–3in)"],       appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Lining Material",         suggestions: ["Leather", "Textile", "Mesh", "Synthetic"],                 appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Open/Closed Toe",         suggestions: ["Open Toe", "Closed Toe"],                                  appliesTo: ["10001077", "10001076"] },
+  { name: "Shoe Type",               suggestions: ["Sneaker", "Loafer", "Oxford", "Ankle Boot", "Running"],    appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Sole Material",           suggestions: ["Rubber", "EVA", "PU", "Leather"],                          appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Upper Material",          suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Mesh"],         appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Waterproof",              suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
 ]
 
 // Resolve the brick code from a category description (matches Brick Confirmation labels)
@@ -691,7 +707,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   }
 
   // Calculate stats
-  const totalAttributes = attributeGroups.reduce((sum, g) => sum + g.gtins.length, 0)
+  // Prompt 2: Total Attributes = sum of all productsApplicable values from ATTRIBUTES (1,439)
+  const totalAttributes = ATTRIBUTES.reduce((sum, attr) => sum + attr.productsApplicable, 0)
   // Change 4: Include batch-selected items in count
   const confirmedAttributes = attributeGroups.reduce(
   (sum, g) => sum + g.gtins.filter((gt) => gt.status === "confirmed" || gt.status === "edited" || gt.status === "batch-selected").length,
@@ -701,7 +718,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const confirmedPercentage = Math.round((confirmedAttributes / totalAttributes) * 100)
 
   // Attribute-level review progress (for progress indicator in header)
-  const totalAttributeRows = attributeGroups.length
+  // Prompt 2: Use ATTRIBUTES.length (14) for total attribute count
+  const totalAttributeRows = ATTRIBUTES.length
   const reviewedAttributeRows = attributeGroups.filter(
     (g) => g.gtins.every((gt) => gt.status === "confirmed" || gt.status === "edited")
   ).length

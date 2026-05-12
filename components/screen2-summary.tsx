@@ -25,7 +25,7 @@ const CATEGORY_ATTRIBUTES: Record<string, {
     attributes: [
       { name: "Closure Type",   suggestion: "Lace-up",    confidence: 98, gtins: "87/87",  flag: null },
       { name: "Upper Material", suggestion: "Suede/Mesh", confidence: 95, gtins: "87/87",  flag: null },
-      { name: "Toe Shape",      suggestion: "Round",      confidence: 97, gtins: "87/87",  flag: null },
+      { name: "Faux Fur",       suggestion: "No",         confidence: 97, gtins: "87/87",  flag: null },
       { name: "Sole Material",  suggestion: "Rubber",     confidence: 82, gtins: "81/87",  flag: "amber", note: "6 GTINs have a different suggestion — visible in review" },
     ],
   },
