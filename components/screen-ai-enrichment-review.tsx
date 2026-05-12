@@ -240,6 +240,101 @@ interface AttributeGroup {
   gtins: GTINAttribute[]
 }
 
+// Fix 1B: Product-level mock data for expanded attribute rows
+interface ProductChildGtin {
+  gtin: string
+  colorCode: string
+  sizeCode: string
+  valueApplied: string
+}
+
+interface ProductAttributeRow {
+  product: string
+  suggestedValue: string | null
+  confidence: number
+  source: string | null
+  childGtins: ProductChildGtin[]
+}
+
+// Exact mock data from specification for expanded attribute view
+const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
+  {
+    product: "Men's Oxford Dress Shoe",
+    suggestedValue: "Clarks",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "070 - 9", valueApplied: "Clarks" },
+      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "070 - 9", valueApplied: "Clarks" },
+      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "080 - 10", valueApplied: "Clarks" },
+    ],
+  },
+  {
+    product: "Women's Canvas Slip-on",
+    suggestedValue: "Adidas",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "060 - 7", valueApplied: "Adidas" },
+      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "060 - 7", valueApplied: "Adidas" },
+    ],
+  },
+  {
+    product: "Kids' Velcro Sneaker",
+    suggestedValue: "New Balance",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "030 - 1", valueApplied: "New Balance" },
+    ],
+  },
+  {
+    product: "Leather Moccasin Loafer",
+    suggestedValue: "Clarks",
+    confidence: 0.97,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "080 - 10", valueApplied: "Clarks" },
+    ],
+  },
+  {
+    product: "Platform Wedge Sandal",
+    suggestedValue: "Timberland",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "060 - 7", valueApplied: "Timberland" },
+    ],
+  },
+  {
+    product: "Suede Chelsea Boot",
+    suggestedValue: null,
+    confidence: 0.42,
+    source: null,
+    childGtins: [
+      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "080 - 10", valueApplied: "—" },
+    ],
+  },
+  {
+    product: "Mesh Running Trainer",
+    suggestedValue: "Adidas",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "080 - 10", valueApplied: "Adidas" },
+    ],
+  },
+  {
+    product: "Waterproof Hiking Shoe",
+    suggestedValue: "New Balance",
+    confidence: 0.99,
+    source: "Extracted from product title",
+    childGtins: [
+      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "080 - 10", valueApplied: "New Balance" },
+    ],
+  },
+]
+
 // Reasoning patterns keyed to attribute names.
 // User-facing: only the product category matters; the underlying taxonomy is not surfaced.
 const reasoningPatterns: Record<string, (desc: string, gtin: string) => string> = {
@@ -392,7 +487,22 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const [hasExpandedOnce, setHasExpandedOnce] = useState(false)
   // Change 4: Batch confirm as toggles — tracks which threshold is currently selected (null = none)
   const [batchSelectedThreshold, setBatchSelectedThreshold] = useState<number | null>(null)
+  // Fix 1B: Track which products have their GTIN sub-table expanded
+  const [expandedProductGtins, setExpandedProductGtins] = useState<Set<string>>(new Set())
   const itemsPerPage = 25
+
+  // Fix 1B: Toggle "View GTINs" sub-expansion for a product row
+  const toggleProductGtins = (productName: string) => {
+    setExpandedProductGtins((prev) => {
+      const next = new Set(prev)
+      if (next.has(productName)) {
+        next.delete(productName)
+      } else {
+        next.add(productName)
+      }
+      return next
+    })
+  }
 
   const toggleExpand = (attrName: string) => {
     setExpandedAttributes((prev) => {
@@ -983,258 +1093,135 @@ const handleConfirmComplete = () => {
                     </td>
                   </tr>
 
-                  {/* Expanded GTIN rows with pagination */}
-                  {isExpanded && (() => {
-                    const { items, total, totalPages } = getFilteredAndPaginatedGtins(group.gtins)
-                    const lowConfidenceCount = group.gtins.filter((g) => g.confidence < 70).length
-                    const autoValidatedCount = group.gtins.filter((g) => g.confidence >= 70).length
-                    const showingLowConfidence = items.some((g) => g.confidence < 70)
-                    const showingAutoValidated = items.some((g) => g.confidence >= 70)
-                    
-                    return (
-                      <>
-                        {/* Section header for low-confidence GTINs */}
-                        {lowConfidenceCount > 0 && showingLowConfidence && (
-                          <tr className="border-b border-[#fed7aa] bg-[#fef5e7]">
-                            <td colSpan={6} className="px-3 py-2 text-[11px] font-semibold text-[#b45309]">
-                              Items needing review ({items.filter((g) => g.confidence < 70).length} shown)
-                            </td>
-                          </tr>
-                        )}
+                  {/* Fix 1B: Expanded Product rows with "View GTINs" sub-expansion */}
+                  {isExpanded && (
+                    <>
+                      {/* Product-level header row */}
+                      <tr className="border-b border-[#e5e7eb] bg-[#f7f8fa]">
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide">Product</td>
+                        <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide text-center">Suggested Value</td>
+                        <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide text-center">Confidence</td>
+                        <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide text-center">Actions</td>
+                      </tr>
+                      
+                      {/* Product rows from mock data */}
+                      {BRAND_NAME_PRODUCTS.map((product) => {
+                        const confidencePercent = Math.round(product.confidence * 100)
+                        const isBelowThreshold = confidencePercent < 60
+                        const isProductGtinsExpanded = expandedProductGtins.has(product.product)
                         
-                        {items.map((gtin) => {
-                          const isEditing = editingGtin?.attribute === group.attributeName && editingGtin.gtin === gtin.gtin
-                          // Below 60%: suggestion is suppressed — show N/A unless user has provided their own value
-                          const isSuppressed = gtin.confidence < 60 && gtin.status !== "edited"
-                          const displayValue = gtin.status === "edited"
-                            ? gtin.userValue!
-                            : isSuppressed
-                              ? "N/A"
-                              : gtin.aiSuggestion
-                          const isLowConfidence = gtin.confidence < 70
-
-                          return (
+                        return (
+                          <>
+                            {/* Product row */}
                             <tr
-                              key={`${group.attributeName}-${gtin.gtin}`}
+                              key={`${group.attributeName}-${product.product}`}
                               className={`border-b ${
-                                isSuppressed
+                                isBelowThreshold
                                   ? "border-[#fecaca] bg-[#fff5f5]"
-                                  : isLowConfidence
-                                    ? "border-[#fed7aa] bg-[#fef5e7]"
-                                    : "border-[#f3f4f6] bg-[#fafbfc]"
-                              } ${
-                                gtin.status === "confirmed" || gtin.status === "edited" || gtin.status === "batch-selected" ? "opacity-70" : ""
+                                  : "border-[#f3f4f6] bg-[#fafbfc]"
                               }`}
                             >
                               <td className="px-3 py-2.5"></td>
                               <td className="px-3 py-2.5">
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="font-mono text-[11px] text-[#1a5fa6] font-medium">{gtin.gtin}</span>
-                                  <span className="text-[10px] text-[#6b7280] truncate" title={gtin.productDescription}>{gtin.productDescription}</span>
+                                  <span className="text-[12px] text-[#1a1f2e] font-medium">{product.product}</span>
+                                  <button
+                                    onClick={() => toggleProductGtins(product.product)}
+                                    className="text-[10px] text-[#6b7280] hover:text-[#1a5fa6] hover:underline text-left w-fit"
+                                  >
+                                    {isProductGtinsExpanded ? "Hide GTINs" : "View GTINs"}
+                                  </button>
                                 </div>
                               </td>
                               <td className="px-3 py-2.5 text-center">
-                                {isEditing ? (
-                                  <AttributeValueCombobox
-                                    attributeName={group.attributeName}
-                                    value={editValue}
-                                    onChange={setEditValue}
-                                    onSave={saveEdit}
-                                    onCancel={cancelEdit}
-                                  />
-                                ) : isSuppressed ? (
-                                  <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
-                                    <span className="text-[10px] text-[#dc2626]">Below confidence threshold</span>
-                                  </div>
+                                {isBelowThreshold ? (
+                                  <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
                                 ) : (
-                                  <span className="text-[12px] font-semibold text-[#1a1f2e]">{displayValue}</span>
+                                  <span className="text-[12px] font-semibold text-[#1a1f2e]">{product.suggestedValue}</span>
                                 )}
                               </td>
                               <td className="px-3 py-2.5 text-center">
-                                <div className="flex flex-col gap-1">
+                                {/* Fix 1B: When confidence < 60%, do NOT render the confidence bar — just empty cell */}
+                                {!isBelowThreshold && (
                                   <div className="flex items-center justify-center gap-1.5">
                                     <div className="w-10 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
                                       <div
-                                        className={`h-full transition-all ${
-                                          gtin.confidence >= 90 ? "bg-[#2e7d32]"
-                                          : gtin.confidence >= 80 ? "bg-[#f59e0b]"
-                                          : gtin.confidence >= 60 ? "bg-[#dc2626]"
-                                          : "bg-[#9ca3af]"
-                                        }`}
-                                        style={{ width: `${gtin.confidence}%` }}
+                                        className="h-full bg-[#2e7d32]"
+                                        style={{ width: `${confidencePercent}%` }}
                                       />
                                     </div>
-                                    <span className={`text-[11px] font-medium ${gtin.confidence < 60 ? "text-[#9ca3af]" : "text-[#6b7280]"}`}>
-                                      {gtin.confidence}%
+                                    <span className="text-[11px] font-medium text-[#6b7280]">
+                                      {confidencePercent}%
                                     </span>
                                   </div>
-                                  <p className="text-[9px] text-[#9ca3af] text-center italic truncate" title={gtin.aiReasoning}>
-                                    {isSuppressed ? "Confidence too low to suggest a value" : gtin.aiReasoning}
-                                  </p>
-                                </div>
+                                )}
                               </td>
                               <td className="px-3 py-2.5 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  {isEditing ? (
-                                    <>
-                                      <button
-                                        onClick={saveEdit}
-                                        className="p-1 hover:bg-[#dcfce7] rounded transition-colors"
-                                        title="Save"
-                                      >
-                                        <Check className="w-4 h-4 text-[#2e7d32]" />
-                                      </button>
-                                      <button
-                                        onClick={cancelEdit}
-                                        className="p-1 hover:bg-[#fee2e2] rounded transition-colors"
-                                        title="Cancel"
-                                      >
-                                        <X className="w-4 h-4 text-[#dc2626]" />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {gtin.status === "pending" && (
-                                        <div className="flex items-center justify-center gap-1.5">
-                                          {/* Confirm is suppressed when confidence < 60 and no user value exists */}
-                                          {!isSuppressed && (
-                                            <button
-                                              onClick={() => confirmSingleGtin(group.attributeName, gtin.gtin)}
-                                              className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#1a5fa6] hover:bg-[#1a4f8c] transition-colors"
-                                            >
-                                              Confirm
-                                            </button>
-                                          )}
-                                          <button
-                                            onClick={() => startEdit(group.attributeName, gtin.gtin, isSuppressed ? "" : gtin.aiSuggestion)}
-                                            className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                                              isSuppressed
-                                                ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
-                                                : "border border-[#6b7280] text-[#374151] hover:bg-[#f3f4f6]"
-                                            }`}
-                                            title={isSuppressed ? "Enter a value manually to enable confirmation" : undefined}
-                                          >
-                                            {isSuppressed ? "Enter Value" : "Edit"}
-                                          </button>
-                                          <button
-                                            onClick={() => rejectGtin(group.attributeName, gtin.gtin)}
-                                            className="px-2 py-1 text-[11px] font-medium border border-[#dc2626] text-[#dc2626] rounded hover:bg-[#fee2e2] transition-colors"
-                                          >
-                                            Reject
-                                          </button>
-                                        </div>
-                                      )}
-                                      {(gtin.status === "confirmed" || gtin.status === "edited") && (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded bg-[#dcfce7] text-[#166534]">
-                                            <Check className="w-3 h-3" />
-                                            {gtin.status === "edited" ? "Edited" : "Confirmed"}
-                                          </span>
-                                          <button
-                                            onClick={() => undoSingleGtin(group.attributeName, gtin.gtin)}
-                                            className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
-                                            title="Undo confirmation"
-                                          >
-                                            Undo
-                                          </button>
-                                        </div>
-                                      )}
-                                      {/* Change 4: Batch-selected badge — lighter green with Undo */}
-                                      {gtin.status === "batch-selected" && (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded bg-[#d1fae5] text-[#047857] border border-[#22c55e]">
-                                            <Check className="w-3 h-3" />
-                                            Batch selected
-                                          </span>
-                                          <button
-                                            onClick={() => undoSingleGtin(group.attributeName, gtin.gtin)}
-                                            className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
-                                            title="Remove from batch selection"
-                                          >
-                                            Undo
-                                          </button>
-                                        </div>
-                                      )}
-                                      {gtin.status === "rejected" && (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded bg-[#fee2e2] text-[#dc2626]">
-                                            <X className="w-3 h-3" />
-                                            Rejected
-                                          </span>
-                                          <button
-                                            onClick={() => undoRejectGtin(group.attributeName, gtin.gtin)}
-                                            className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
-                                            title="Undo rejection"
-                                          >
-                                            Undo
-                                          </button>
-                                        </div>
-                                      )}
-                                    </>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {/* Fix 1B: When confidence < 60%, hide Confirm, show only Edit and Reject */}
+                                  {!isBelowThreshold && (
+                                    <button
+                                      onClick={() => confirmSingleGtin(group.attributeName, product.childGtins[0]?.gtin || "")}
+                                      className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
+                                    >
+                                      Confirm
+                                    </button>
                                   )}
+                                  <button
+                                    onClick={() => startEdit(group.attributeName, product.childGtins[0]?.gtin || "", product.suggestedValue || "")}
+                                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                                      isBelowThreshold
+                                        ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
+                                        : "border border-[#6b7280] text-[#374151] hover:bg-[#f3f4f6]"
+                                    }`}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => rejectGtin(group.attributeName, product.childGtins[0]?.gtin || "")}
+                                    className="px-2 py-1 text-[11px] font-medium border border-[#dc2626] text-[#dc2626] rounded hover:bg-[#fee2e2] transition-colors"
+                                  >
+                                    Reject
+                                  </button>
                                 </div>
                               </td>
                             </tr>
-                          )
-                        })}
-                        
-                        {/* Summary of confirmed GTINs */}
-                        {autoValidatedCount > items.filter((g) => g.confidence >= 70).length && (
-                          <tr className="border-b border-[#d1fae5] bg-[#ecfdf5]">
-                            <td colSpan={6} className="px-3 py-2 text-[11px] font-semibold text-[#047857]">
-                              {autoValidatedCount - items.filter((g) => g.confidence >= 70).length} more items confirmed (high confidence)
-                            </td>
-                          </tr>
-                        )}
-                        
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                          <tr className="border-b border-[#f3f4f6] bg-[#fafbfc]">
-                            <td colSpan={5} className="px-6 py-3 flex items-center justify-center gap-2 text-[12px]">
-                              <span className="text-[#6b7280]">
-                                Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, total)} of {total}
-                              </span>
-                              <div className="flex gap-1">
-                                {currentPage > 1 && (
-                                  <button
-                                    onClick={() => setCurrentPage(1)}
-                                    className="px-2 py-1 text-[11px] border border-[#d1d5db] rounded hover:bg-[#e5e7eb]"
-                                  >
-                                    First
-                                  </button>
-                                )}
-                                {currentPage > 1 && (
-                                  <button
-                                    onClick={() => setCurrentPage(currentPage - 1)}
-                                    className="px-2 py-1 text-[11px] border border-[#d1d5db] rounded hover:bg-[#e5e7eb]"
-                                  >
-                                    Prev
-                                  </button>
-                                )}
-                                {currentPage < totalPages && (
-                                  <button
-                                    onClick={() => setCurrentPage(currentPage + 1)}
-                                    className="px-2 py-1 text-[11px] border border-[#d1d5db] rounded hover:bg-[#e5e7eb]"
-                                  >
-                                    Next
-                                  </button>
-                                )}
-                                {currentPage < totalPages && (
-                                  <button
-                                    onClick={() => setCurrentPage(totalPages)}
-                                    className="px-2 py-1 text-[11px] border border-[#d1d5db] rounded hover:bg-[#e5e7eb]"
-                                  >
-                                    Last
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    )
-                  })()}
+                            
+                            {/* GTIN sub-table when expanded */}
+                            {isProductGtinsExpanded && (
+                              <tr key={`${group.attributeName}-${product.product}-gtins`}>
+                                <td colSpan={5} className="p-0">
+                                  <div className="bg-[#f9fafb] border-b border-[#e5e7eb]">
+                                    <table className="w-full text-[11px]">
+                                      <thead>
+                                        <tr className="border-b border-[#e5e7eb]">
+                                          <th className="text-left px-8 py-1.5 font-medium text-[#6b7280] w-40">GTIN</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Color Code</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Size Code</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Value Applied</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {product.childGtins.map((child) => (
+                                          <tr key={child.gtin} className="border-b border-[#f3f4f6] last:border-0">
+                                            <td className="px-8 py-1.5 font-mono text-[10px] text-[#374151]">{child.gtin}</td>
+                                            <td className="px-3 py-1.5 text-[#374151]">{child.colorCode}</td>
+                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode}</td>
+                                            <td className="px-3 py-1.5 text-[#374151]">{child.valueApplied}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )
+                      })}
+                    </>
+                  )}
                 </tbody>
               )
           })}
