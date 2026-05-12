@@ -29,6 +29,8 @@ interface ScreenBrickConfirmationProps {
   onProceedToEnrichment: (categories: ConfirmedCategory[]) => void
   onBack: () => void
   onSkipToSelectionCodeList: () => void
+  // Bug 3 fix: Handler for individual product assignment view
+  onAssignIndividually?: (scope: "unclassified" | "all-low-confidence", productCount: number) => void
 }
 
 // Change 1: Product-level grouping - categories show product counts as primary
@@ -59,7 +61,7 @@ const SAMPLE_UNCERTAIN_PRODUCTS: UncertainProduct[] = [
   { id: "prod8", description: "Pearl drop earring set",             gtinCount: 1 },
 ]
 
-export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList }: ScreenBrickConfirmationProps) {
+export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList, onAssignIndividually }: ScreenBrickConfirmationProps) {
   // Merge high-confidence and low-confidence categories into a single list
   const [categories, setCategories] = useState<BrickCategory[]>([...INITIAL_CATEGORIES, ...LOW_CONFIDENCE_CATEGORIES])
   // Track whether "Confirm All" batch action was used (enables batch undo)
@@ -144,17 +146,19 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
     onViewGtins(categoryId, categoryName, brickCode)
   }
 
-  // Fix A: Handler for "Assign Individually" on Could not classify card
+  // Bug 3 fix: Handler for "Assign Individually" on Could not classify card
   const handleAssignIndividually = () => {
-    // This would navigate to individual product assignment UI
-    // For now, we log it; in a real app, this would call a handler passed via props
-    console.log("[v0] Navigating to individual product assignment view")
+    const unclassifiedCount = unclassifiableCategory?.productCount || 4
+    if (onAssignIndividually) {
+      onAssignIndividually("unclassified", unclassifiedCount)
+    }
   }
 
-  // Fix A: Handler for "Review all N products individually" link
+  // Bug 3 fix: Handler for "Review all N products individually" link
   const handleReviewAllIndividually = () => {
-    // This would navigate to individual product assignment UI for ALL unclassified products
-    console.log("[v0] Navigating to review all unclassified products individually")
+    if (onAssignIndividually) {
+      onAssignIndividually("all-low-confidence", totalLowConfidenceProducts)
+    }
   }
 
   return (

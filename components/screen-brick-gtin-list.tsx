@@ -141,10 +141,52 @@ const MOCK_PRODUCTS: ProductRecord[] = [
   },
 ]
 
+// Bug 2 fix: Low-confidence category mock data
+const LOW_CONFIDENCE_SHOES: ProductRecord[] = [
+  { product: "Blue canvas sneaker collection", gtins: 4, selCode: "001", confidence: 0.55, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414001", colorCode: "003 - Navy", sizeCode: "10070 - 9" }], declined: false },
+  { product: "Running shoe series, mesh upper", gtins: 6, selCode: "001", confidence: 0.50, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414002", colorCode: "010 - White", sizeCode: "10080 - 10" }], declined: false },
+  { product: "Casual lace-up walking shoe", gtins: 3, selCode: "001", confidence: 0.48, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414003", colorCode: "001 - Black", sizeCode: "10075 - 9.5" }], declined: false },
+  { product: "Slip-on garden clog", gtins: 2, selCode: "001", confidence: 0.52, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414004", colorCode: "007 - Green", sizeCode: "10065 - 8" }], declined: false },
+  { product: "Platform espadrille", gtins: 3, selCode: "001", confidence: 0.49, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414005", colorCode: "008 - Beige", sizeCode: "10060 - 7" }], declined: false },
+  { product: "Woven slide sandal", gtins: 2, selCode: "001", confidence: 0.53, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414006", colorCode: "002 - Brown", sizeCode: "10070 - 9" }], declined: false },
+  { product: "Ankle-strap flat", gtins: 1, selCode: "001", confidence: 0.51, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414007", colorCode: "001 - Black", sizeCode: "10065 - 8" }], declined: false },
+  { product: "Studded mule", gtins: 2, selCode: "001", confidence: 0.54, category: "Shoes - General Purpose", childGtins: [{ gtin: "0888546414008", colorCode: "006 - Tan", sizeCode: "10070 - 9" }], declined: false },
+]
+
+const LOW_CONFIDENCE_NIGHTWEAR: ProductRecord[] = [
+  { product: "Silk nightgown collection", gtins: 2, selCode: "001", confidence: 0.46, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415001", colorCode: "011 - Pink", sizeCode: "10040 - S" }], declined: false },
+  { product: "Cotton sleep shorts set", gtins: 3, selCode: "001", confidence: 0.44, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415002", colorCode: "003 - Navy", sizeCode: "10050 - M" }], declined: false },
+  { product: "Flannel pajama top", gtins: 4, selCode: "001", confidence: 0.48, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415003", colorCode: "005 - Red", sizeCode: "10060 - L" }], declined: false },
+  { product: "Satin camisole set", gtins: 2, selCode: "001", confidence: 0.45, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415004", colorCode: "010 - White", sizeCode: "10040 - S" }], declined: false },
+  { product: "Jersey sleep dress", gtins: 3, selCode: "001", confidence: 0.47, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415005", colorCode: "004 - Grey", sizeCode: "10050 - M" }], declined: false },
+  { product: "Thermal henley nightshirt", gtins: 2, selCode: "001", confidence: 0.43, category: "Night Dresses/Shirts", childGtins: [{ gtin: "0888546415006", colorCode: "001 - Black", sizeCode: "10060 - L" }], declined: false },
+]
+
+const LOW_CONFIDENCE_BRACELETS: ProductRecord[] = [
+  { product: "Silver charm bracelet line", gtins: 1, selCode: "001", confidence: 0.42, category: "Bracelets", childGtins: [{ gtin: "0888546416001", colorCode: "012 - Silver", sizeCode: "10001 - OS" }], declined: false },
+  { product: "Gold bangle set", gtins: 2, selCode: "001", confidence: 0.44, category: "Bracelets", childGtins: [{ gtin: "0888546416002", colorCode: "013 - Gold", sizeCode: "10001 - OS" }], declined: false },
+  { product: "Leather wrap bracelet", gtins: 1, selCode: "001", confidence: 0.46, category: "Bracelets", childGtins: [{ gtin: "0888546416003", colorCode: "002 - Brown", sizeCode: "10001 - OS" }], declined: false },
+  { product: "Beaded stretch bracelet", gtins: 3, selCode: "001", confidence: 0.45, category: "Bracelets", childGtins: [{ gtin: "0888546416004", colorCode: "014 - Multi", sizeCode: "10001 - OS" }], declined: false },
+]
+
+// Bug 2 fix: Map category IDs to their respective mock data
+const CATEGORY_DATA_MAP: Record<string, ProductRecord[]> = {
+  // High-confidence categories (from INITIAL_CATEGORIES)
+  "1": MOCK_PRODUCTS,
+  "2": MOCK_PRODUCTS,
+  "3": MOCK_PRODUCTS,
+  // Low-confidence categories (from LOW_CONFIDENCE_CATEGORIES)
+  "lc1": LOW_CONFIDENCE_SHOES,
+  "lc2": LOW_CONFIDENCE_NIGHTWEAR,
+  "lc3": LOW_CONFIDENCE_BRACELETS,
+}
+
 const ITEMS_PER_PAGE = 25
 
-export function ScreenBrickGtinList({ categoryName, onBack }: ScreenBrickGtinListProps) {
-  const [products, setProducts] = useState<ProductRecord[]>(MOCK_PRODUCTS)
+export function ScreenBrickGtinList({ categoryId, categoryName, onBack }: ScreenBrickGtinListProps) {
+  // Bug 2 fix: Select correct mock data based on categoryId
+  const initialProducts = CATEGORY_DATA_MAP[categoryId] || MOCK_PRODUCTS
+  const [products, setProducts] = useState<ProductRecord[]>(initialProducts)
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set())
   const [movingProduct, setMovingProduct] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")

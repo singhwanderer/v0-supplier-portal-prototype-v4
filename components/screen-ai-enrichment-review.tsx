@@ -505,6 +505,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const [batchSelectedThreshold, setBatchSelectedThreshold] = useState<number | null>(null)
   // Fix 1B: Track which products have their GTIN sub-table expanded
   const [expandedProductGtins, setExpandedProductGtins] = useState<Set<string>>(new Set())
+  // Bug fix: Track product-level confirmed/rejected state (keyed by "attrName|productName")
+  const [productStates, setProductStates] = useState<Record<string, "pending" | "confirmed" | "rejected">>({})
+  // Bug fix: Track which product is currently being edited (keyed by "attrName|productName")
+  const [editingProduct, setEditingProduct] = useState<{ attribute: string; product: string } | null>(null)
+  const [editProductValue, setEditProductValue] = useState("")
   const itemsPerPage = 25
 
   // Fix 1B: Toggle "View GTINs" sub-expansion for a product row
@@ -681,6 +686,44 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const startEdit = (attrName: string, gtin: string, currentValue: string) => {
     setEditingGtin({ attribute: attrName, gtin })
     setEditValue(currentValue)
+  }
+
+  // Bug fix: Product-level confirm handler
+  const confirmProduct = (attrName: string, productName: string) => {
+    const key = `${attrName}|${productName}`
+    setProductStates((prev) => ({ ...prev, [key]: "confirmed" }))
+  }
+
+  // Bug fix: Product-level reject handler
+  const rejectProduct = (attrName: string, productName: string) => {
+    const key = `${attrName}|${productName}`
+    setProductStates((prev) => ({ ...prev, [key]: "rejected" }))
+  }
+
+  // Bug fix: Product-level undo handler
+  const undoProduct = (attrName: string, productName: string) => {
+    const key = `${attrName}|${productName}`
+    setProductStates((prev) => ({ ...prev, [key]: "pending" }))
+  }
+
+  // Bug fix: Start editing a product value
+  const startProductEdit = (attrName: string, productName: string, currentValue: string) => {
+    setEditingProduct({ attribute: attrName, product: productName })
+    setEditProductValue(currentValue)
+  }
+
+  // Bug fix: Save product edit
+  const saveProductEdit = (attrName: string, productName: string) => {
+    const key = `${attrName}|${productName}`
+    setProductStates((prev) => ({ ...prev, [key]: "confirmed" }))
+    setEditingProduct(null)
+    setEditProductValue("")
+  }
+
+  // Bug fix: Cancel product edit
+  const cancelProductEdit = () => {
+    setEditingProduct(null)
+    setEditProductValue("")
   }
 
   const saveEdit = () => {
@@ -1041,11 +1084,16 @@ const handleConfirmComplete = () => {
             )
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
-              const confirmedCount = group.gtins.filter((g) => g.status === "confirmed" || g.status === "edited").length
+              // Bug fix: Get product count from ATTRIBUTES (not GTINs count) for consistent alignment
+              const attrData = ATTRIBUTES.find(a => a.name === group.attributeName)
+              const totalProductsForAttr = metadata.products || Math.ceil(metadata.gtins / 2.3) // Use same value as Total Products tile
+              const confirmedProductCount = Object.keys(productStates).filter(
+                key => key.startsWith(`${group.attributeName}|`) && (productStates[key] === "confirmed" || productStates[key] === "rejected")
+              ).length
               const avgConfidence = Math.round(
                 group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length
               )
-              const allConfirmed = confirmedCount === group.gtins.length
+              const allConfirmed = confirmedProductCount >= totalProductsForAttr
 
               return (
                 <tbody key={group.attributeName} id={`attr-row-${group.attributeName.replace(/\s+/g, "-").toLowerCase()}`}>
@@ -1080,7 +1128,7 @@ const handleConfirmComplete = () => {
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`font-semibold ${allConfirmed ? "text-[#166534]" : "text-[#1a5fa6]"}`}>
-                        {confirmedCount}/{group.gtins.length}
+                        {confirmedProductCount}/{totalProductsForAttr}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1139,6 +1187,11 @@ const handleConfirmComplete = () => {
                         const confidencePercent = Math.round(product.confidence * 100)
                         const isBelowThreshold = confidencePercent < 60
                         const isProductGtinsExpanded = expandedProductGtins.has(product.product)
+                        const productKey = `${group.attributeName}|${product.product}`
+                        const productState = productStates[productKey] || "pending"
+                        const isEditing = editingProduct?.attribute === group.attributeName && editingProduct?.product === product.product
+                        const isConfirmed = productState === "confirmed"
+                        const isRejected = productState === "rejected"
                         
                         return (
                           <>
@@ -1146,7 +1199,11 @@ const handleConfirmComplete = () => {
                             <tr
                               key={`${group.attributeName}-${product.product}`}
                               className={`border-b ${
-                                isBelowThreshold
+                                isConfirmed
+                                  ? "border-[#bbf7d0] bg-[#f0fdf4]"
+                                  : isRejected
+                                  ? "border-[#fecaca] bg-[#fef2f2]"
+                                  : isBelowThreshold
                                   ? "border-[#fecaca] bg-[#fff5f5]"
                                   : "border-[#f3f4f6] bg-[#fafbfc]"
                               }`}
@@ -1164,7 +1221,18 @@ const handleConfirmComplete = () => {
                                 </div>
                               </td>
                               <td className="px-3 py-2.5 text-center">
-                                {isBelowThreshold ? (
+                                {/* Show inline combobox when editing */}
+                                {isEditing ? (
+                                  <div className="w-full max-w-[200px] mx-auto">
+                                    <AttributeValueCombobox
+                                      attributeName={group.attributeName}
+                                      value={editProductValue}
+                                      onChange={setEditProductValue}
+                                      onSave={() => saveProductEdit(group.attributeName, product.product)}
+                                      onCancel={cancelProductEdit}
+                                    />
+                                  </div>
+                                ) : isBelowThreshold ? (
                                   <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
                                 ) : (
                                   <span className="text-[12px] font-semibold text-[#1a1f2e]">{product.suggestedValue}</span>
@@ -1172,7 +1240,7 @@ const handleConfirmComplete = () => {
                               </td>
                               <td className="px-3 py-2.5 text-center">
                                 {/* Fix 1B: When confidence < 60%, do NOT render the confidence bar — just empty cell */}
-                                {!isBelowThreshold && (
+                                {!isBelowThreshold && !isEditing && (
                                   <div className="flex items-center justify-center gap-1.5">
                                     <div className="w-10 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
                                       <div
@@ -1188,31 +1256,75 @@ const handleConfirmComplete = () => {
                               </td>
                               <td className="px-3 py-2.5 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
-                                  {/* Fix 1B: When confidence < 60%, hide Confirm, show only Edit and Reject */}
-                                  {!isBelowThreshold && (
-                                    <button
-                                      onClick={() => confirmSingleGtin(group.attributeName, product.childGtins[0]?.gtin || "")}
-                                      className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
-                                    >
-                                      Confirm
-                                    </button>
+                                  {/* Show confirmed state with Undo */}
+                                  {isConfirmed ? (
+                                    <>
+                                      <span className="flex items-center gap-1 text-[11px] font-semibold text-[#166534]">
+                                        <Check className="w-3.5 h-3.5" /> Confirmed
+                                      </span>
+                                      <button
+                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
+                                      >
+                                        Undo
+                                      </button>
+                                    </>
+                                  ) : isRejected ? (
+                                    <>
+                                      <span className="flex items-center gap-1 text-[11px] font-semibold text-[#dc2626]">
+                                        <X className="w-3.5 h-3.5" /> Rejected
+                                      </span>
+                                      <button
+                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
+                                      >
+                                        Undo
+                                      </button>
+                                    </>
+                                  ) : isEditing ? (
+                                    <>
+                                      <button
+                                        onClick={() => saveProductEdit(group.attributeName, product.product)}
+                                        className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={cancelProductEdit}
+                                        className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#dc2626]"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Fix 1B: When confidence < 60%, hide Confirm, show only Edit and Reject */}
+                                      {!isBelowThreshold && (
+                                        <button
+                                          onClick={() => confirmProduct(group.attributeName, product.product)}
+                                          className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
+                                        >
+                                          Confirm
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => startProductEdit(group.attributeName, product.product, product.suggestedValue || "")}
+                                        className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                                          isBelowThreshold
+                                            ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
+                                            : "border border-[#6b7280] text-[#374151] hover:bg-[#f3f4f6]"
+                                        }`}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => rejectProduct(group.attributeName, product.product)}
+                                        className="px-2 py-1 text-[11px] font-medium border border-[#dc2626] text-[#dc2626] rounded hover:bg-[#fee2e2] transition-colors"
+                                      >
+                                        Reject
+                                      </button>
+                                    </>
                                   )}
-                                  <button
-                                    onClick={() => startEdit(group.attributeName, product.childGtins[0]?.gtin || "", product.suggestedValue || "")}
-                                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                                      isBelowThreshold
-                                        ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
-                                        : "border border-[#6b7280] text-[#374151] hover:bg-[#f3f4f6]"
-                                    }`}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => rejectGtin(group.attributeName, product.childGtins[0]?.gtin || "")}
-                                    className="px-2 py-1 text-[11px] font-medium border border-[#dc2626] text-[#dc2626] rounded hover:bg-[#fee2e2] transition-colors"
-                                  >
-                                    Reject
-                                  </button>
                                 </div>
                               </td>
                             </tr>

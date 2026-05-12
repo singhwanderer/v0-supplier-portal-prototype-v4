@@ -13,6 +13,7 @@ import { ScreenSelectionCode } from "@/components/screen-selection-code"
 import { ScreenSelectionCodeList } from "@/components/screen-selection-code-list"
 import { ScreenAIEnrichmentReview } from "@/components/screen-ai-enrichment-review"
 import { ScreenCategoryFallback } from "@/components/screen-category-fallback"
+import { ScreenIndividualAssignment } from "@/components/screen-individual-assignment"
 
 export interface ConfirmedCategory {
   id: string
@@ -23,7 +24,7 @@ export interface ConfirmedCategory {
 }
 
 type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment"
-type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback"
+type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment"
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("upload")
@@ -39,6 +40,8 @@ export default function Home() {
   const [enrichmentUpdates, setEnrichmentUpdates] = useState<Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }>>({})
   // Tracks which entry point took the user into Brick Confirmation so we can adapt copy and routing
   const [brickConfirmationSource, setBrickConfirmationSource] = useState<"upload" | "selection-code">("upload")
+  // Bug 3 fix: Track individual assignment scope
+  const [individualAssignmentScope, setIndividualAssignmentScope] = useState<"unclassified" | "all-low-confidence">("unclassified")
 
   const goHome = () => {
     setScreen("upload")
@@ -161,6 +164,17 @@ export default function Home() {
             }
           }}
           onSkipToSelectionCodeList={() => setScreen("selection-code-list")}
+          onAssignIndividually={(scope) => {
+            setIndividualAssignmentScope(scope)
+            setScreen("individual-assignment")
+          }}
+        />
+      )}
+
+      {screen === "individual-assignment" && (
+        <ScreenIndividualAssignment
+          scope={individualAssignmentScope}
+          onBack={() => setScreen("brick-confirmation")}
         />
       )}
 
