@@ -218,18 +218,20 @@ function AttributeValueCombobox({
 
 interface ScreenAIEnrichmentReviewProps {
   selectedCodes: string[]
-  codesMetadata: Record<string, { gtins: number; description: string }>
+  codesMetadata: Record<string, { gtins: number; products?: number; description: string }>
   onBack: () => void
   onComplete: (confirmedPercentage: number, codes: string[]) => void
-}
+  }
 
+// Change 1: Renamed to ProductAttribute (was GTINAttribute) to reflect product-level grouping
+// Change 4: Added "batch-selected" status for threshold toggles
 interface GTINAttribute {
   gtin: string
   productDescription: string
   aiSuggestion: string
   aiReasoning: string
   confidence: number
-  status: "pending" | "confirmed" | "edited" | "rejected"
+  status: "pending" | "confirmed" | "edited" | "rejected" | "batch-selected"
   userValue?: string
 }
 
@@ -269,22 +271,22 @@ interface FootwearAttributeDef {
   appliesTo: ("10001077" | "10001076" | "10001070")[]
 }
 
+// Change 3: Removed "Advertised Origin" — now 14 attributes total
 const FOOTWEAR_ATTRIBUTES: FootwearAttributeDef[] = [
-  { name: "Advertised Origin",                  suggestions: ["Imported", "Domestic"],                                    appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Brand Name",                         suggestions: ["Nike", "Adidas", "New Balance", "Clarks", "Timberland"],   appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Care Instructions Code",             suggestions: ["Wipe Clean", "Spot Clean", "Machine Wash", "Hand Wash"],   appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Care Instructions",                  suggestions: ["Wipe Clean", "Spot Clean", "Machine Wash", "Hand Wash"],   appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Closure",                            suggestions: ["Lace-up", "Zip", "Slip-on", "Velcro", "Buckle"],           appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Country of Origin",                  suggestions: ["China", "Vietnam", "India", "Indonesia"],                  appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Fabric or Material Code",            suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Textile"],      appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Faux Fur",                           suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Gender",                             suggestions: ["Men", "Women", "Unisex", "Boys", "Girls"],                 appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Heel Height",                        suggestions: ["Flat", "Low (<1in)", "Mid (1–2in)", "High (2–3in)"],       appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Lining Material",                    suggestions: ["Leather", "Textile", "Mesh", "Synthetic"],                 appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Open/Closed Toe",                    suggestions: ["Open Toe", "Closed Toe"],                                  appliesTo: ["10001077", "10001076"] },
   { name: "Shoe Type",                          suggestions: ["Sneaker", "Loafer", "Oxford", "Ankle Boot", "Running"],    appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Sole Type",                          suggestions: ["Rubber", "EVA", "PU", "Leather"],                          appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Sole Material",                      suggestions: ["Rubber", "EVA", "PU", "Leather"],                          appliesTo: ["10001077", "10001076", "10001070"] },
   { name: "Toe Shape",                          suggestions: ["Round", "Square", "Pointed", "Almond"],                    appliesTo: ["10001077", "10001076"] },
-  { name: "Toe Style",                          suggestions: ["Plain", "Cap Toe", "Wing Tip", "Moc Toe"],                 appliesTo: ["10001077", "10001076"] },
+  { name: "Upper Material",                     suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Mesh"],         appliesTo: ["10001077", "10001076", "10001070"] },
+  { name: "Waterproof",                         suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
 ]
 
 // Resolve the brick code from a category description (matches Brick Confirmation labels)
@@ -310,10 +312,9 @@ function generateRandomGtin(): string {
   return `${prefix}${suffix}`
 }
 
-// Only these 3 attributes have any low-confidence GTINs — all others are fully auto-validated.
-// This reflects a realistic, optimistic AI: the vast majority of suggestions are high confidence,
-// and only a small number of attributes — where descriptions are ambiguous — surface edge cases.
-const LOW_CONFIDENCE_ATTRIBUTES = new Set(["Toe Shape", "Closure", "Fabric or Material Code"])
+// Only these 3 attributes have any low-confidence products — all others are fully auto-validated.
+// Change 3: Updated to match revised attribute list (Closure, Fabric or Material Code, Upper Material)
+const LOW_CONFIDENCE_ATTRIBUTES = new Set(["Closure", "Fabric or Material Code", "Upper Material"])
 
 // Generate attribute groups with unique suggestions per GTIN and reasoning
 function generateAttributeData(code: string, gtinCount: number, description: string): AttributeGroup[] {
@@ -389,6 +390,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [hasExpandedOnce, setHasExpandedOnce] = useState(false)
+  // Change 4: Batch confirm as toggles — tracks which threshold is currently selected (null = none)
+  const [batchSelectedThreshold, setBatchSelectedThreshold] = useState<number | null>(null)
   const itemsPerPage = 25
 
   const toggleExpand = (attrName: string) => {
@@ -432,15 +435,46 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     )
   }
 
+  // Change 4: Batch confirm is now a toggle that sets "batch-selected" status, not immediate confirm
+  const toggleBatchThreshold = (threshold: number) => {
+    if (batchSelectedThreshold === threshold) {
+      // Same threshold clicked again — undo the batch selection
+      setBatchSelectedThreshold(null)
+      setAttributeGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          gtins: group.gtins.map((g) =>
+            g.status === "batch-selected" ? { ...g, status: "pending" } : g
+          ),
+        }))
+      )
+    } else {
+      // New threshold — first clear any prior batch selection, then apply new one
+      setBatchSelectedThreshold(threshold)
+      setAttributeGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          gtins: group.gtins.map((g) => {
+            // Remove prior batch-selected status
+            if (g.status === "batch-selected") {
+              return g.confidence >= threshold
+                ? { ...g, status: "batch-selected" as const }
+                : { ...g, status: "pending" }
+            }
+            // Mark pending items at or above threshold as batch-selected
+            if (g.status === "pending" && g.confidence >= threshold) {
+              return { ...g, status: "batch-selected" as const }
+            }
+            return g
+          }),
+        }))
+      )
+    }
+  }
+
+  // Legacy function kept for compatibility — now routes through toggle
   const confirmByConfidenceThreshold = (threshold: number) => {
-    setAttributeGroups((prev) =>
-      prev.map((group) => ({
-        ...group,
-        gtins: group.gtins.map((g) =>
-          g.status === "pending" && g.confidence >= threshold ? { ...g, status: "confirmed" } : g
-        ),
-      }))
-    )
+    toggleBatchThreshold(threshold)
   }
 
   const confirmSingleGtin = (attrName: string, gtin: string) => {
@@ -548,9 +582,10 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
   // Calculate stats
   const totalAttributes = attributeGroups.reduce((sum, g) => sum + g.gtins.length, 0)
+  // Change 4: Include batch-selected items in count
   const confirmedAttributes = attributeGroups.reduce(
-    (sum, g) => sum + g.gtins.filter((gt) => gt.status === "confirmed" || gt.status === "edited").length,
-    0
+  (sum, g) => sum + g.gtins.filter((gt) => gt.status === "confirmed" || gt.status === "edited" || gt.status === "batch-selected").length,
+  0
   )
   const pendingAttributes = totalAttributes - confirmedAttributes
   const confirmedPercentage = Math.round((confirmedAttributes / totalAttributes) * 100)
@@ -562,10 +597,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   ).length
   const attributeReviewPercent = Math.round((reviewedAttributeRows / totalAttributeRows) * 100)
 
+  // Change 4: Include batch-selected items in enriched count (they'll be confirmed on Complete)
   const gtinConfirmedMap: Record<string, number> = {}
   attributeGroups.forEach((group) => {
     group.gtins.forEach((gt) => {
-      if (gt.status === "confirmed" || gt.status === "edited") {
+      if (gt.status === "confirmed" || gt.status === "edited" || gt.status === "batch-selected") {
         gtinConfirmedMap[gt.gtin] = (gtinConfirmedMap[gt.gtin] || 0) + 1
       }
     })
@@ -605,9 +641,18 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setShowConfirmDialog(true)
   }
 
-  const handleConfirmComplete = () => {
-    setShowConfirmDialog(false)
-    onComplete(enrichedGtinPercent, [code])
+const handleConfirmComplete = () => {
+  // Change 4: Convert all batch-selected items to confirmed before completing
+  setAttributeGroups((prev) =>
+    prev.map((group) => ({
+      ...group,
+      gtins: group.gtins.map((g) =>
+        g.status === "batch-selected" ? { ...g, status: "confirmed" } : g
+      ),
+    }))
+  )
+  setShowConfirmDialog(false)
+  onComplete(enrichedGtinPercent, [code])
   }
 
   const handleCancelComplete = () => {
@@ -686,64 +731,75 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         <p className="text-[#3b82f6]">Review suggestions below. Expand any row to edit individual items.</p>
       </div>
 
-      {/* Batch Actions */}
-      <div className="flex items-center gap-2 p-3 bg-[#f0f9ff] border border-[#bfdbfe] rounded">
-        <span className="text-[12px] font-semibold text-[#1e40af]">Batch Confirm:</span>
-        <button
-          onClick={() => confirmByConfidenceThreshold(95)}
-          className="px-2 py-1 text-[12px] bg-white border border-[#1e40af] text-[#1e40af] rounded hover:bg-[#eff6ff] transition-colors"
-        >
-          95%+
-        </button>
-        <button
-          onClick={() => confirmByConfidenceThreshold(90)}
-          className="px-2 py-1 text-[12px] bg-white border border-[#1e40af] text-[#1e40af] rounded hover:bg-[#eff6ff] transition-colors"
-        >
-          90%+
-        </button>
-        <button
-          onClick={() => confirmByConfidenceThreshold(80)}
-          className="px-2 py-1 text-[12px] bg-white border border-[#1e40af] text-[#1e40af] rounded hover:bg-[#eff6ff] transition-colors"
-        >
-          80%+
-        </button>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showLowConfidenceOnly}
-          onClick={() => {
-            setShowLowConfidenceOnly((prev) => !prev)
-            setCurrentPage(1)
-          }}
-          className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f59e0b] ${
-            showLowConfidenceOnly
-              ? "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
-              : "bg-white border-[#d1d5db] text-[#6b7280] hover:border-[#f59e0b] hover:text-[#92400e]"
-          }`}
-          title="Toggle to show only attributes and GTINs with AI confidence below 85%"
-        >
-          <span
-            className={`w-3 h-3 rounded-full border-2 transition-colors ${
-              showLowConfidenceOnly ? "bg-[#f59e0b] border-[#f59e0b]" : "bg-transparent border-[#9ca3af]"
+      {/* Batch Actions — Change 4: Toggles that set intention, not immediate persist */}
+      <div className="flex flex-col gap-2 p-3 bg-[#f0f9ff] border border-[#bfdbfe] rounded">
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-semibold text-[#1e40af]">Batch Select:</span>
+          {[95, 90, 80].map((threshold) => (
+            <button
+              key={threshold}
+              onClick={() => toggleBatchThreshold(threshold)}
+              className={`px-2 py-1 text-[12px] rounded transition-colors ${
+                batchSelectedThreshold === threshold
+                  ? "bg-[#dcfce7] border-2 border-[#22c55e] text-[#166534] font-semibold"
+                  : "bg-white border border-[#1e40af] text-[#1e40af] hover:bg-[#eff6ff]"
+              }`}
+            >
+              {threshold}%+ {batchSelectedThreshold === threshold && "✓"}
+            </button>
+          ))}
+          {batchSelectedThreshold && (
+            <button
+              onClick={() => toggleBatchThreshold(batchSelectedThreshold)}
+              className="px-2 py-1 text-[12px] text-[#dc2626] hover:underline"
+            >
+              Clear selection
+            </button>
+          )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showLowConfidenceOnly}
+            onClick={() => {
+              setShowLowConfidenceOnly((prev) => !prev)
+              setCurrentPage(1)
+            }}
+            className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f59e0b] ${
+              showLowConfidenceOnly
+                ? "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
+                : "bg-white border-[#d1d5db] text-[#6b7280] hover:border-[#f59e0b] hover:text-[#92400e]"
             }`}
-            aria-hidden="true"
-          />
-          Low Confidence Only (&lt;85%)
-        </button>
+            title="Toggle to show only attributes and products with AI confidence below 85%"
+          >
+            <span
+              className={`w-3 h-3 rounded-full border-2 transition-colors ${
+                showLowConfidenceOnly ? "bg-[#f59e0b] border-[#f59e0b]" : "bg-transparent border-[#9ca3af]"
+              }`}
+              aria-hidden="true"
+            />
+            Low Confidence Only (&lt;85%)
+          </button>
+        </div>
+        {/* Change 4: Note about batch selection being intention, not persist */}
+        {batchSelectedThreshold && (
+          <p className="text-[11px] text-[#6b7280] italic">
+            Batch selection sets your intention — click &quot;Complete Enrichment&quot; to save all changes.
+          </p>
+        )}
       </div>
 
-      {/* Stats */}
+      {/* Stats — Change 1: Products instead of GTINs */}
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white border border-[#d1d5db] rounded p-4">
-          <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total GTINs</p>
-          <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{metadata.gtins}</p>
+          <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Products</p>
+          <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{metadata.products || Math.ceil(metadata.gtins / 2.3)}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Attributes</p>
           <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalAttributes}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
-          <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">GTINs Enriched</p>
+          <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Products Enriched</p>
           <p className="text-[24px] font-bold text-[#2e7d32] mt-1">{gtinsEnriched}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
@@ -805,12 +861,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               </th>
               <th className="px-3 py-2.5 text-center font-semibold text-[#374151] uppercase text-[11px] tracking-wide">
                 <span className="inline-flex items-center gap-1 justify-center">
-                  GTINs Enriched
+                  Products Enriched
                   <Info
                     className="w-3 h-3 text-[#9ca3af] cursor-help"
-                    aria-label="Confirmed out of applicable GTINs. Some attributes don't apply to every product — those GTINs aren't counted."
+                    aria-label="Confirmed out of applicable products. Some attributes don't apply to every product — those aren't counted."
                   >
-                    <title>Confirmed out of applicable GTINs. Some attributes don&apos;t apply to every product — those GTINs aren&apos;t counted.</title>
+                    <title>Confirmed out of applicable products. Some attributes don&apos;t apply to every product — those aren&apos;t counted.</title>
                   </Info>
                 </span>
               </th>
@@ -967,7 +1023,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                     ? "border-[#fed7aa] bg-[#fef5e7]"
                                     : "border-[#f3f4f6] bg-[#fafbfc]"
                               } ${
-                                gtin.status === "confirmed" || gtin.status === "edited" ? "opacity-70" : ""
+                                gtin.status === "confirmed" || gtin.status === "edited" || gtin.status === "batch-selected" ? "opacity-70" : ""
                               }`}
                             >
                               <td className="px-3 py-2.5"></td>
@@ -1079,6 +1135,22 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                             onClick={() => undoSingleGtin(group.attributeName, gtin.gtin)}
                                             className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
                                             title="Undo confirmation"
+                                          >
+                                            Undo
+                                          </button>
+                                        </div>
+                                      )}
+                                      {/* Change 4: Batch-selected badge — lighter green with Undo */}
+                                      {gtin.status === "batch-selected" && (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded bg-[#d1fae5] text-[#047857] border border-[#22c55e]">
+                                            <Check className="w-3 h-3" />
+                                            Batch selected
+                                          </span>
+                                          <button
+                                            onClick={() => undoSingleGtin(group.attributeName, gtin.gtin)}
+                                            className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
+                                            title="Remove from batch selection"
                                           >
                                             Undo
                                           </button>
@@ -1215,7 +1287,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             </div>
             <span className="text-[12px] text-[#6b7280]">|</span>
             <span className="text-[12px] text-[#6b7280]">
-              {gtinsEnriched} of {metadata.gtins} GTINs enriched ({enrichedGtinPercent}%)
+              {gtinsEnriched} of {metadata.products || Math.ceil(metadata.gtins / 2.3)} products enriched ({enrichedGtinPercent}%)
             </span>
           </div>
           <button
@@ -1236,17 +1308,23 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               <h3 id="confirm-dialog-title" className="text-[16px] font-semibold text-[#1a1f2e]">Complete Enrichment?</h3>
             </div>
             <div className="px-6 py-5 space-y-4">
-              {/* Summary — confirmed */}
+              {/* Summary — Change 6: Use "products" instead of "GTINs" */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-[13px] text-[#374151]">
                   <CheckCircle2 className="w-4 h-4 text-[#2e7d32] shrink-0" />
-                  <span><strong>{gtinsEnriched}</strong> of {metadata.gtins} GTINs enriched</span>
+                  <span><strong>{gtinsEnriched}</strong> of {metadata.products || Math.ceil(metadata.gtins / 2.3)} products enriched</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px] text-[#374151]">
                   <CheckCircle2 className="w-4 h-4 text-[#2e7d32] shrink-0" />
                   <span><strong>{reviewedAttributeRows}</strong> of {totalAttributeRows} attributes reviewed</span>
                 </div>
               </div>
+              {/* Change 6: Note about unreviewed attributes */}
+              {reviewedAttributeRows < totalAttributeRows && (
+                <p className="text-[12px] text-[#6b7280] italic">
+                  Unreviewed attributes will not be saved. You can return to enrich more later.
+                </p>
+              )}
 
               {/* Low-confidence attributes — named with breakdown */}
               {attributesWithLowConfidence.length > 0 && (

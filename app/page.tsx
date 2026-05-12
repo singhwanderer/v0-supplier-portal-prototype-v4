@@ -17,7 +17,8 @@ import { ScreenCategoryFallback } from "@/components/screen-category-fallback"
 export interface ConfirmedCategory {
   id: string
   name: string
-  gtinCount: number
+  productCount: number  // Change 1: Primary unit is now products
+  gtinCount: number     // GTINs shown for reference
   confidence: number
 }
 
@@ -34,7 +35,7 @@ export default function Home() {
   const [selectedBrickCode, setSelectedBrickCode] = useState<string>("")
   const [reviewCategoryKey, setReviewCategoryKey] = useState<string>("")
   const [selectedSelectionCodes, setSelectedSelectionCodes] = useState<string[]>([])
-  const [selectedCodesMetadata, setSelectedCodesMetadata] = useState<Record<string, { gtins: number; description: string }>>({})
+  const [selectedCodesMetadata, setSelectedCodesMetadata] = useState<Record<string, { gtins: number; products: number; description: string }>>({})
   const [enrichmentUpdates, setEnrichmentUpdates] = useState<Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }>>({})
   // Tracks which entry point took the user into Brick Confirmation so we can adapt copy and routing
   const [brickConfirmationSource, setBrickConfirmationSource] = useState<"upload" | "selection-code">("upload")
@@ -125,6 +126,11 @@ export default function Home() {
             brickConfirmationSource === "selection-code"
               ? selectedSelectionCodes.reduce((sum, code) => sum + (selectedCodesMetadata[code]?.gtins ?? 0), 0)
               : uploadedGtinCount
+          }
+          totalProductCount={
+            brickConfirmationSource === "selection-code"
+              ? selectedSelectionCodes.reduce((sum, code) => sum + (selectedCodesMetadata[code]?.products ?? 0), 0)
+              : Math.ceil(uploadedGtinCount / 2.3) // Estimate products from GTINs
           }
           sourceContext={
             brickConfirmationSource === "selection-code"

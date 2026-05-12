@@ -18,9 +18,9 @@ interface SelectionCodeRow {
 }
 
 interface ScreenSelectionCodeListProps {
-  onEnrichSelected: (codes: string[], metadata: Record<string, { gtins: number; description: string }>) => void
+onEnrichSelected: (codes: string[], metadata: Record<string, { gtins: number; products: number; description: string }>) => void
   enrichmentUpdates?: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }>
-}
+  }
 
 const INITIAL_SELECTION_CODE_DATA: SelectionCodeRow[] = [
   { id: "1", code: "001", description: "Footwear",             products: 52, gtins: 288, createDate: "08/10/2015", lastUpdateDate: "03/10/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
@@ -102,14 +102,14 @@ export function ScreenSelectionCodeList({ onEnrichSelected, enrichmentUpdates }:
     setSelectedRows(new Set())
   }
 
-  const handleEnrichSelected = () => {
-    const selectedData = sortedData.filter((r) => selectedRows.has(r.id))
-    const selectedCodes = selectedData.map((r) => r.code)
-    const metadata: Record<string, { gtins: number; description: string }> = {}
-    selectedData.forEach((r) => {
-      metadata[r.code] = { gtins: r.gtins, description: r.description }
-    })
-    onEnrichSelected(selectedCodes, metadata)
+const handleEnrichSelected = () => {
+  const selectedData = sortedData.filter((r) => selectedRows.has(r.id))
+  const selectedCodes = selectedData.map((r) => r.code)
+  const metadata: Record<string, { gtins: number; products: number; description: string }> = {}
+  selectedData.forEach((r) => {
+    metadata[r.code] = { gtins: r.gtins, products: r.products, description: r.description }
+  })
+  onEnrichSelected(selectedCodes, metadata)
   }
 
   const SortIcon = ({ column }: { column: SortKey }) => (

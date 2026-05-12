@@ -1,25 +1,29 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, ArrowRight, Info, HelpCircle, ArrowLeft, ListChecks } from "lucide-react"
+import { CheckCircle2, ArrowRight, Info, HelpCircle, ArrowLeft, ListChecks, AlertTriangle } from "lucide-react"
 import type { ConfirmedCategory } from "@/app/page"
 
 interface BrickCategory {
   id: string
   name: string
   brickCode: string
-  gtinCount: number
+  productCount: number  // Primary unit is now products, not GTINs
+  gtinCount: number     // GTINs shown in parentheses for reference
   confidence: number
   confirmed: boolean
+  enriched?: boolean           // Change 5: Previously enriched category
+  enrichedDate?: string        // Change 5: Date when enrichment completed
 }
 
 export type BrickConfirmationSource =
   | { type: "upload"; fileName: string }
-  | { type: "selection-code"; codes: string[]; metadata: Record<string, { gtins: number; description: string }> }
+  | { type: "selection-code"; codes: string[]; metadata: Record<string, { gtins: number; products: number; description: string }> }
 
 interface ScreenBrickConfirmationProps {
   fileName: string
   totalGtinCount: number
+  totalProductCount: number
   sourceContext?: BrickConfirmationSource
   onViewGtins: (categoryId: string, categoryName: string, brickCode: string) => void
   onProceedToEnrichment: (categories: ConfirmedCategory[]) => void
@@ -27,12 +31,19 @@ interface ScreenBrickConfirmationProps {
   onSkipToSelectionCodeList: () => void
 }
 
+// Change 1: Product-level grouping - categories show product counts as primary
 const INITIAL_CATEGORIES: BrickCategory[] = [
-  { id: "1", name: "Shoes - General Purpose",             brickCode: "10001077", gtinCount: 288, confidence: 94, confirmed: false },
-  { id: "2", name: "Boots - General Purpose",             brickCode: "10001076", gtinCount: 157, confidence: 91, confirmed: false },
-  { id: "3", name: "Athletic Footwear - General Purpose", brickCode: "10001070", gtinCount: 198, confidence: 96, confirmed: false },
-  // Example of an unresolved group (confidence < 70) that triggers the inline fallback picker
-  { id: "4", name: "Unresolved group",                    brickCode: "",         gtinCount: 47,  confidence: 62, confirmed: false },
+  { id: "1", name: "Shoes - General Purpose",             brickCode: "10001077", productCount: 125, gtinCount: 288, confidence: 94, confirmed: false },
+  { id: "2", name: "Boots - General Purpose",             brickCode: "10001076", productCount: 72,  gtinCount: 157, confidence: 91, confirmed: false },
+  { id: "3", name: "Athletic Footwear - General Purpose", brickCode: "10001070", productCount: 88,  gtinCount: 198, confidence: 96, confirmed: false },
+]
+
+// Change 2: Low-confidence categories replace the single uncertain tile picker
+const LOW_CONFIDENCE_CATEGORIES: BrickCategory[] = [
+  { id: "lc1", name: "Shoes - General Purpose", brickCode: "10001077", productCount: 8, gtinCount: 18, confidence: 52, confirmed: false },
+  { id: "lc2", name: "Night Dresses/Shirts",    brickCode: "10001339", productCount: 6, gtinCount: 14, confidence: 48, confirmed: false },
+  { id: "lc3", name: "Bracelets",               brickCode: "10001342", productCount: 4, gtinCount: 9,  confidence: 45, confirmed: false },
+  { id: "lc4", name: "Could not classify",      brickCode: "",         productCount: 4, gtinCount: 8,  confidence: 0,  confirmed: false },
 ]
 
 // Segment tiles shown when confidence < 70. Each tile carries a plain-language reason — no GPC/brick mentioned.
@@ -69,19 +80,17 @@ const FALLBACK_SUB_OPTIONS: Record<string, { name: string; brickCode: string }[]
   ],
 }
 
-// Sample GTINs shown in the "Review individually" table for the uncertain card (47 GTINs total in prototype).
-interface UncertainGtin { gtin: string; description: string }
-const SAMPLE_UNCERTAIN_GTINS: UncertainGtin[] = [
-  { gtin: "019283501116", description: "Blue canvas sneaker, lace-up" },
-  { gtin: "045678123452", description: "Leather ankle boot, side zip" },
-  { gtin: "052847141271", description: "Running shoe, mesh upper, rubber sole" },
-  { gtin: "088854561795", description: "Silk nightgown, knee length" },
-  { gtin: "091638770968", description: "Cotton sleep shorts, elastic waist" },
-  { gtin: "084756388063", description: "Silver charm bracelet, 7.5 inch" },
-  { gtin: "057421469391", description: "Gold pendant necklace, 18 inch chain" },
-  { gtin: "019283356486", description: "Pearl drop earrings, sterling silver" },
-  { gtin: "084756508498", description: "Wool dressing gown, tie waist" },
-  { gtin: "052847134948", description: "Athletic training shoe, cushioned sole" },
+// Change 1: Sample PRODUCTS shown in the "Review individually" table for the unclassified section
+interface UncertainProduct { id: string; description: string; gtinCount: number }
+const SAMPLE_UNCERTAIN_PRODUCTS: UncertainProduct[] = [
+  { id: "prod1", description: "Blue canvas sneaker collection",     gtinCount: 4 },
+  { id: "prod2", description: "Leather ankle boot set",             gtinCount: 3 },
+  { id: "prod3", description: "Running shoe series, mesh upper",    gtinCount: 6 },
+  { id: "prod4", description: "Silk nightgown collection",          gtinCount: 2 },
+  { id: "prod5", description: "Cotton sleep shorts set",            gtinCount: 3 },
+  { id: "prod6", description: "Silver charm bracelet line",         gtinCount: 1 },
+  { id: "prod7", description: "Gold pendant necklace collection",   gtinCount: 2 },
+  { id: "prod8", description: "Pearl drop earring set",             gtinCount: 1 },
 ]
 
 // Per-card picker state: quick-pick (segment tiles) vs. individual-review (per-GTIN table)
@@ -91,8 +100,9 @@ type PickerState = { mode: PickerMode; segmentId: string | null }
 // Each GTIN's assignment is encoded as "segmentId:brickCode" — null means unassigned
 type Assignments = Record<string, string | null>
 
-export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList }: ScreenBrickConfirmationProps) {
-  const [categories, setCategories] = useState<BrickCategory[]>(INITIAL_CATEGORIES)
+export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList }: ScreenBrickConfirmationProps) {
+  // Merge high-confidence and low-confidence categories into a single list
+  const [categories, setCategories] = useState<BrickCategory[]>([...INITIAL_CATEGORIES, ...LOW_CONFIDENCE_CATEGORIES])
   // Keyed by uncertain-card id → picker state
   const [pickerState, setPickerState] = useState<Record<string, PickerState>>({})
   // Keyed by uncertain-card id → per-GTIN assignment map
@@ -108,12 +118,19 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
   // Track which single category the user has selected to enrich (so it can be unselected)
   const [selectedEnrichId, setSelectedEnrichId] = useState<string | null>(null)
 
-  const confirmedList = categories.filter((c) => c.confirmed)
+  // Separate high-confidence and low-confidence categories for display
+  const highConfidenceCategories = categories.filter((c) => c.confidence >= 70 || c.enriched)
+  const lowConfidenceCategories = categories.filter((c) => c.confidence < 70 && c.confidence > 0 && !c.enriched)
+  const unclassifiableCategory = categories.find((c) => c.confidence === 0 && c.name === "Could not classify")
+  
+  const confirmedList = categories.filter((c) => c.confirmed || c.enriched)
   const confirmedCount = confirmedList.length
   const totalCount = categories.length
   const allConfirmed = confirmedCount === totalCount
+  const totalConfirmedProducts = confirmedList.reduce((s, c) => s + c.productCount, 0)
   const totalConfirmedGtins = confirmedList.reduce((s, c) => s + c.gtinCount, 0)
-  const hasUncertain = categories.some((c) => c.confidence < 70 && !c.confirmed)
+  const hasUncertain = lowConfidenceCategories.length > 0 || unclassifiableCategory
+  const totalLowConfidenceProducts = lowConfidenceCategories.reduce((s, c) => s + c.productCount, 0) + (unclassifiableCategory?.productCount ?? 0)
 
   const fromSelectionCode = sourceContext?.type === "selection-code"
   const selectionCodeLabel = fromSelectionCode && sourceContext.codes.length > 0
@@ -160,13 +177,13 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
       return
     }
     setSelectedEnrichId(cat.id)
-    const toEnrich: ConfirmedCategory[] = [{ id: cat.id, name: cat.name, gtinCount: cat.gtinCount, confidence: cat.confidence }]
+    const toEnrich: ConfirmedCategory[] = [{ id: cat.id, name: cat.name, gtinCount: cat.gtinCount, productCount: cat.productCount, confidence: cat.confidence }]
     onProceedToEnrichment(toEnrich)
   }
 
   const handleEnrichAll = () => {
-    const toEnrich: ConfirmedCategory[] = confirmedList.map((c) => ({
-      id: c.id, name: c.name, gtinCount: c.gtinCount, confidence: c.confidence,
+    const toEnrich: ConfirmedCategory[] = confirmedList.filter(c => !c.enriched).map((c) => ({
+      id: c.id, name: c.name, gtinCount: c.gtinCount, productCount: c.productCount, confidence: c.confidence,
     }))
     onProceedToEnrichment(toEnrich)
   }
@@ -216,8 +233,8 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
   const toggleBulkAll = (cardId: string) =>
     setBulkSelected((prev) => {
       const current = prev[cardId] ?? new Set<string>()
-      if (current.size === SAMPLE_UNCERTAIN_GTINS.length) return { ...prev, [cardId]: new Set() }
-      return { ...prev, [cardId]: new Set(SAMPLE_UNCERTAIN_GTINS.map((g) => g.gtin)) }
+      if (current.size === SAMPLE_UNCERTAIN_PRODUCTS.length) return { ...prev, [cardId]: new Set() }
+      return { ...prev, [cardId]: new Set(SAMPLE_UNCERTAIN_PRODUCTS.map((p) => p.id)) }
     })
 
   // Apply the selected category to every GTIN in the bulk-selected set
@@ -316,7 +333,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
         >
           <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>
-            Enriching Selection Code <strong>{selectionCodeLabel}</strong> &middot; {totalGtinCount.toLocaleString()} GTINs
+            Enriching Selection Code <strong>{selectionCodeLabel}</strong> &middot; {totalProductCount.toLocaleString()} Products ({totalGtinCount.toLocaleString()} GTINs)
           </span>
         </div>
       ) : (
@@ -327,7 +344,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
         >
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: "#2e7d32" }} aria-hidden="true" />
           <span>
-            Upload complete — <strong>{fileName || "catalog.csv"}</strong> &middot; {totalGtinCount.toLocaleString()} GTINs loaded
+            Upload complete — <strong>{fileName || "catalog.csv"}</strong> &middot; {totalProductCount.toLocaleString()} Products ({totalGtinCount.toLocaleString()} GTINs) loaded
           </span>
         </div>
       )}
@@ -338,10 +355,10 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
           <h2 className="text-[16px] font-semibold text-[#1a1f2e]">
             {fromSelectionCode
               ? `Review product categories for ${selectionCodeLabel}`
-              : `Review product categories for your ${totalGtinCount.toLocaleString()} GTINs`}
+              : `Review product categories for your ${totalProductCount.toLocaleString()} Products`}
           </h2>
           <p className="text-[13px] text-[#6b7280] mt-1 max-w-2xl">
-            We read your GTIN descriptions and grouped them into product categories. Review each group, then continue to attribute enrichment.
+            We read your product descriptions and grouped them into categories. Review each group, then continue to attribute enrichment.
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -350,7 +367,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
           </p>
           {confirmedCount > 0 && (
             <p className="text-[12px] text-[#1a5fa6] mt-0.5">
-              {totalConfirmedGtins.toLocaleString()} GTINs ready for enrichment
+              {totalConfirmedProducts.toLocaleString()} Products ready for enrichment
             </p>
           )}
         </div>
@@ -364,291 +381,46 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
         </span>
       </div>
 
-      {/* Category Cards */}
+      {/* High-Confidence Category Cards */}
       <div className="grid gap-3">
-        {categories.map((cat) => {
-          const isUncertain = cat.confidence < 70 && !cat.confirmed
-          const picker = pickerState[cat.id] ?? { mode: "quick", segmentId: null }
-
-          // Uncertain card: inline disambiguation picker — no confidence numbers, no jargon.
-          if (isUncertain) {
-            const subOptions = picker.segmentId ? FALLBACK_SUB_OPTIONS[picker.segmentId] : null
-            const selectedSegmentLabel = FALLBACK_SEGMENTS.find((s) => s.id === picker.segmentId)?.label
-            const cardAssignments = assignments[cat.id] ?? {}
-            const cardSelected = bulkSelected[cat.id] ?? new Set<string>()
-            const assignedCount = Object.values(cardAssignments).filter(Boolean).length
-            const allSelected = cardSelected.size === SAMPLE_UNCERTAIN_GTINS.length
-            const someSelected = cardSelected.size > 0
-
-            // Live count: remaining = total minus number of sample GTINs already assigned (1:1, no scaling)
-            const remainingCount = Math.max(0, cat.gtinCount - assignedCount)
-            // Build a live preview of tallies per assigned category — raw sample counts, no scaling
-            const liveTallies: Record<string, { name: string; count: number }> = {}
-            Object.values(cardAssignments).forEach((key) => {
-              if (!key) return
-              const [segId, brickCode] = key.split(":")
-              const opt = FALLBACK_SUB_OPTIONS[segId]?.find((o) => o.brickCode === brickCode)
-              if (!opt) return
-              if (!liveTallies[key]) liveTallies[key] = { name: opt.name, count: 0 }
-              liveTallies[key].count += 1
-            })
-            const liveTalliesArr = Object.entries(liveTallies).map(([key, t]) => ({
-              key,
-              name: t.name,
-              count: t.count,
-            }))
-
+        {highConfidenceCategories.map((cat) => {
+          // Change 5: Enriched category state — read-only with green tint
+          if (cat.enriched) {
             return (
               <div
                 key={cat.id}
-                className="rounded border-2 border-dashed border-[#f59e0b] bg-[#fffbeb] p-4"
-                role="region"
-                aria-label="Help us confirm the product type"
+                className="rounded border p-4 bg-[#f0fdf4] border-[#86efac]"
               >
-                <div className="flex items-start gap-2 mb-3">
-                  <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
-                        Help us confirm the product type
-                      </h3>
-                      {/* Live count badge — decreases by 1 for each GTIN assigned */}
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[#fef3c7] text-[#92400e] border border-[#fcd34d] tabular-nums transition-all duration-200">
-                        {remainingCount} GTINs remaining
-                      </span>
+                      <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{cat.name}</h3>
+                      <span className="text-[10px] font-mono text-[#9ca3af]">{cat.brickCode}</span>
+                      <span className="text-[13px] text-[#6b7280]">{cat.productCount} Products</span>
+                      <span className="px-2 py-0.5 text-[11px] font-semibold text-white bg-[#2e7d32] rounded">AI Enriched</span>
+                      <span className="text-[11px] text-[#6b7280]">Enriched on {cat.enrichedDate}</span>
                     </div>
-                    <p className="text-[12px] text-[#6b7280] mt-0.5">
-                      To suggest the right attributes, we need to know what type of product this is. Based on your submission, here are the closest matches — select the one that fits.
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Live preview of category tallies when in individual mode and some are assigned */}
-                {picker.mode === "individual" && liveTalliesArr.length > 0 && (
-                  <div className="mb-3 p-2.5 rounded border border-[#d1fae5] bg-[#ecfdf5] flex items-center gap-3 flex-wrap">
-                    <span className="text-[11px] font-semibold text-[#047857]">Assigned so far:</span>
-                    {liveTalliesArr.map((t) => (
-                      <span key={t.key} className="inline-flex items-center gap-1 text-[11px] text-[#065f46] bg-[#d1fae5] px-2 py-0.5 rounded-full">
-                        <span className="font-semibold">{t.count}</span>
-                        <span className="text-[#047857]">{t.count === 1 ? "GTIN" : "GTINs"} →</span>
-                        <span>{t.name}</span>
-                      </span>
-                    ))}
-                    {remainingCount > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-[#92400e] bg-[#fef3c7] px-2 py-0.5 rounded-full">
-                        <span className="font-semibold">{remainingCount}</span>
-                        <span>unassigned</span>
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 1 (quick pick): Segment tiles */}
-                {picker.mode === "quick" && !picker.segmentId && (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      {FALLBACK_SEGMENTS.map((seg) => (
-                        <button
-                          key={seg.id}
-                          onClick={() => openSegment(cat.id, seg.id)}
-                          className="text-left p-3 rounded border border-[#d1d5db] bg-white hover:border-[#1a5fa6] hover:bg-[#f0f7ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                        >
-                          <p className="text-[13px] font-semibold text-[#1a1f2e]">{seg.label}</p>
-                          <p className="text-[11px] text-[#6b7280] mt-1">{seg.reason}</p>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Assign all at once shortcut */}
-                    <div className="mt-3 pt-3 border-t border-[#fde68a] flex items-center justify-between gap-3 flex-wrap">
-                      <button
-                        onClick={() => openIndividual(cat.id)}
-                        className="inline-flex items-center gap-1.5 text-[12px] text-[#1a5fa6] font-medium hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] rounded"
-                      >
-                        <ListChecks className="w-3.5 h-3.5" aria-hidden="true" />
-                        Not all the same type? Review GTINs individually
-                        <ArrowRight className="w-3 h-3" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {/* Step 2 (quick pick): Sub-option selection within the chosen segment */}
-                {picker.mode === "quick" && picker.segmentId && subOptions && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[12px] text-[#374151]">
-                        <span className="text-[#6b7280]">Selected:</span>{" "}
-                        <span className="font-semibold text-[#1a1f2e]">{selectedSegmentLabel}</span>
-                        <span className="text-[#6b7280]"> — now pick the specific product type.</span>
-                      </p>
-                      <button
-                        onClick={() => resetSegment(cat.id)}
-                        className="flex items-center gap-1 text-[12px] text-[#1a5fa6] hover:underline focus:outline-none"
-                      >
-                        <ArrowLeft className="w-3 h-3" aria-hidden="true" />
-                        Change
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-                      {subOptions.map((opt) => (
-                        <button
-                          key={opt.brickCode}
-                          onClick={() => resolveUncertainCard(cat.id, opt)}
-                          className="text-left p-2.5 rounded border border-[#d1d5db] bg-white hover:border-[#2e7d32] hover:bg-[#f0fdf4] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32]"
-                        >
-                          <p className="text-[12px] font-semibold text-[#1a1f2e]">{opt.name}</p>
-                          <p className="text-[10px] font-mono text-[#9ca3af] mt-0.5" title="Internal category reference">
-                            {opt.brickCode}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Individual-review mode: per-GTIN category assignment */}
-                {picker.mode === "individual" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <p className="text-[12px] text-[#374151]">
-                        <span className="text-[#6b7280]">Showing {SAMPLE_UNCERTAIN_GTINS.length} of {cat.gtinCount} GTINs.</span>{" "}
-                        Assign a category to each, then save.
-                      </p>
-                      <button
-                        onClick={() => backToQuickPick(cat.id)}
-                        className="flex items-center gap-1 text-[12px] text-[#1a5fa6] hover:underline focus:outline-none"
-                      >
-                        <ArrowLeft className="w-3 h-3" aria-hidden="true" />
-                        Back to Quick Pick
-                      </button>
-                    </div>
-
-                    {/* Bulk-apply toolbar */}
-                    <div className="flex items-center gap-2 flex-wrap p-2 rounded bg-white border border-[#e5e7eb]">
-                      <span className="text-[12px] text-[#374151]">
-                        {someSelected ? `${cardSelected.size} selected` : "Select GTINs to bulk-apply"}
-                      </span>
-                      <select
-                        value={bulkValue[cat.id] ?? ""}
-                        onChange={(e) => setBulkValue((prev) => ({ ...prev, [cat.id]: e.target.value }))}
-                        disabled={!someSelected}
-                        className="text-[12px] border border-[#d1d5db] rounded px-2 py-1 bg-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                        aria-label="Bulk category to apply"
-                      >
-                        <option value="">Choose category...</option>
-                        {FALLBACK_SEGMENTS.map((seg) => (
-                          <optgroup key={seg.id} label={seg.label}>
-                            {FALLBACK_SUB_OPTIONS[seg.id].map((opt) => (
-                              <option key={opt.brickCode} value={`${seg.id}:${opt.brickCode}`}>
-                                {opt.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => applyBulkValue(cat.id)}
-                        disabled={!someSelected || !(bulkValue[cat.id])}
-                        className="px-2.5 py-1 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                        style={{ backgroundColor: "#1a5fa6" }}
-                      >
-                        Apply to selected
-                      </button>
-                    </div>
-
-                    {/* Per-GTIN table */}
-                    <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
-                      <table className="w-full text-[12px]">
-                        <thead className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                          <tr>
-                            <th className="w-8 px-2 py-2">
-                              <input
-                                type="checkbox"
-                                checked={allSelected}
-                                onChange={() => toggleBulkAll(cat.id)}
-                                aria-label="Select all GTINs"
-                                className="cursor-pointer"
-                              />
-                            </th>
-                            <th className="text-left px-3 py-2 font-semibold text-[#374151] w-32">GTIN</th>
-                            <th className="text-left px-3 py-2 font-semibold text-[#374151]">Description</th>
-                            <th className="text-left px-3 py-2 font-semibold text-[#374151] w-64">Category</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {SAMPLE_UNCERTAIN_GTINS.map((g) => {
-                            const value = cardAssignments[g.gtin] ?? ""
-                            const isSelected = cardSelected.has(g.gtin)
-                            return (
-                              <tr key={g.gtin} className="border-b border-[#f3f4f6] last:border-0 hover:bg-[#fafafa]">
-                                <td className="px-2 py-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleBulkSelected(cat.id, g.gtin)}
-                                    aria-label={`Select GTIN ${g.gtin}`}
-                                    className="cursor-pointer"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 font-mono text-[11px] text-[#1a5fa6]">{g.gtin}</td>
-                                <td className="px-3 py-2 text-[#374151]">{g.description}</td>
-                                <td className="px-3 py-2">
-                                  <select
-                                    value={value}
-                                    onChange={(e) => setGtinAssignment(cat.id, g.gtin, e.target.value || null)}
-                                    className="w-full text-[12px] border border-[#d1d5db] rounded px-2 py-1 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                                    aria-label={`Category for GTIN ${g.gtin}`}
-                                  >
-                                    <option value="">Unassigned</option>
-                                    {FALLBACK_SEGMENTS.map((seg) => (
-                                      <optgroup key={seg.id} label={seg.label}>
-                                        {FALLBACK_SUB_OPTIONS[seg.id].map((opt) => (
-                                          <option key={opt.brickCode} value={`${seg.id}:${opt.brickCode}`}>
-                                            {opt.name}
-                                          </option>
-                                        ))}
-                                      </optgroup>
-                                    ))}
-                                  </select>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <p className="text-[11px] text-[#6b7280] italic">
-                        + {cat.gtinCount - SAMPLE_UNCERTAIN_GTINS.length} more GTINs will be categorized using the same pattern.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-[12px] text-[#374151] tabular-nums">
-                          <span className={assignedCount === SAMPLE_UNCERTAIN_GTINS.length ? "text-[#047857] font-semibold" : "text-[#374151]"}>
-                            {assignedCount}
-                          </span>
-                          {" "}of {SAMPLE_UNCERTAIN_GTINS.length} assigned
-                          {remainingCount > 0 && (
-                            <span className="ml-1.5 text-[#92400e]">({remainingCount} GTINs remaining)</span>
-                          )}
-                        </p>
-                        <button
-                          onClick={() => saveIndividualAssignments(cat.id)}
-                          disabled={assignedCount === 0}
-                          className="px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2e7d32]"
-                          style={{ backgroundColor: "#2e7d32" }}
-                        >
-                          Save &amp; Apply to ({assignedCount}) {assignedCount === 1 ? "GTIN" : "GTINs"} Selected
-                        </button>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-[12px] text-[#6b7280] w-20">Confidence:</span>
+                      <div className="flex-1 max-w-xs h-2 rounded-full bg-[#e8eaed] overflow-hidden">
+                        <div className="h-full rounded-full bg-[#2e7d32]" style={{ width: `${cat.confidence}%` }} />
                       </div>
+                      <span className="text-[12px] font-medium text-[#374151] w-10">{cat.confidence}%</span>
                     </div>
+                    <p className="text-[11px] text-[#6b7280] mt-1.5 italic">To edit attributes, use the product detail page.</p>
                   </div>
-                )}
+                  <button
+                    onClick={() => onViewGtins(cat.id, cat.name, cat.brickCode)}
+                    className="text-[12px] text-[#1a5fa6] font-medium hover:underline"
+                  >
+                    View Products
+                  </button>
+                </div>
               </div>
             )
           }
 
-          // Confident or already-confirmed card: existing layout unchanged.
+          // Confident or already-confirmed card
           return (
             <div
               key={cat.id}
@@ -657,17 +429,11 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
               }`}
             >
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                {/* Left */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{cat.name}</h3>
-                    <span
-                      className="text-[10px] font-mono text-[#9ca3af]"
-                      title="Internal category reference"
-                    >
-                      {cat.brickCode}
-                    </span>
-                    <span className="text-[13px] text-[#6b7280]">{cat.gtinCount} GTINs</span>
+                    <span className="text-[10px] font-mono text-[#9ca3af]">{cat.brickCode}</span>
+                    <span className="text-[13px] text-[#6b7280]">{cat.productCount} Products ({cat.gtinCount} GTINs)</span>
                     {cat.confirmed && (
                       <span className="flex items-center gap-1 text-[12px] text-[#2e7d32] font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -689,14 +455,12 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
                     <span className="text-[12px] font-medium text-[#374151] w-10">{cat.confidence}%</span>
                   </div>
                 </div>
-
-                {/* Right: Actions */}
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <button
                     onClick={() => onViewGtins(cat.id, cat.name, cat.brickCode)}
-                    className="px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                    className="px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
                   >
-                    View {cat.gtinCount} GTINs
+                    View {cat.productCount} Products
                   </button>
                   {!cat.confirmed ? (
                     <button
@@ -747,11 +511,116 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
         })}
       </div>
 
-      {/* Footer tip — shown only when at least one uncertain group exists */}
-      {hasUncertain && (
-        <p className="text-[12px] text-[#6b7280] italic px-1">
-          Tip: Adding details like a short marketing message helps us suggest the right category automatically next time.
-        </p>
+      {/* Change 2: Low-confidence section with multiple cards */}
+      {(lowConfidenceCategories.length > 0 || unclassifiableCategory) && (
+        <div className="rounded-lg border-2 border-dashed border-[#f59e0b] bg-[#fffbeb] p-4 space-y-4">
+          <div className="flex items-start gap-2">
+            <HelpCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
+                Help us confirm the product type — {totalLowConfidenceProducts} Products remaining
+              </h3>
+              <p className="text-[12px] text-[#6b7280] mt-1">
+                We grouped the remaining products by our best guess. Confirm if correct, or review products individually to reassign.
+              </p>
+            </div>
+          </div>
+
+          {/* Low-confidence category cards */}
+          <div className="grid gap-3">
+            {lowConfidenceCategories.map((cat) => (
+              <div
+                key={cat.id}
+                className={`rounded border p-4 bg-white transition-colors ${
+                  cat.confirmed ? "border-[#2e7d32] bg-[#f0fdf4]" : "border-[#fcd34d]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{cat.name}</h3>
+                      <span className="text-[10px] font-mono text-[#9ca3af]">{cat.brickCode}</span>
+                      <span className="text-[13px] text-[#6b7280]">{cat.productCount} Products</span>
+                      {cat.confirmed && (
+                        <span className="flex items-center gap-1 text-[12px] text-[#2e7d32] font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          Confirmed
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-[12px] text-[#6b7280] w-20">Confidence:</span>
+                      <div className="flex-1 max-w-xs h-2 rounded-full bg-[#e8eaed] overflow-hidden">
+                        <div className="h-full rounded-full bg-[#f59e0b]" style={{ width: `${cat.confidence}%` }} />
+                      </div>
+                      <span className="text-[12px] font-medium text-[#92400e] w-10">{cat.confidence}%</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      onClick={() => onViewGtins(cat.id, cat.name, cat.brickCode)}
+                      className="px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                    >
+                      View {cat.productCount} Products
+                    </button>
+                    {!cat.confirmed ? (
+                      <button
+                        onClick={() => handleConfirmCategory(cat.id)}
+                        className="px-3 py-1.5 text-[12px] font-semibold text-white rounded bg-[#1a5fa6] hover:opacity-90 transition-opacity"
+                      >
+                        Confirm Category
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUnconfirmCategory(cat.id)}
+                        className="px-2.5 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6]"
+                      >
+                        Undo Confirm
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Unclassifiable remainder */}
+            {unclassifiableCategory && (
+              <div className="rounded border-2 border-[#dc2626] border-dashed p-4 bg-[#fef2f2]">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AlertTriangle className="w-4 h-4 text-[#dc2626]" aria-hidden="true" />
+                      <h3 className="text-[14px] font-semibold text-[#1a1f2e]">Could not classify</h3>
+                      <span className="text-[13px] text-[#6b7280]">{unclassifiableCategory.productCount} Products</span>
+                    </div>
+                    <p className="text-[12px] text-[#6b7280] mt-1">
+                      These products could not be automatically categorized. Please assign them individually.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openIndividual(unclassifiableCategory.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
+                  >
+                    Assign Individually
+                    <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Link to review all products individually */}
+          <div className="pt-3 border-t border-[#fde68a]">
+            <button
+              onClick={() => openIndividual("all-low-confidence")}
+              className="inline-flex items-center gap-1.5 text-[12px] text-[#1a5fa6] font-medium hover:underline"
+            >
+              <ListChecks className="w-3.5 h-3.5" aria-hidden="true" />
+              Not all the same type? Review all {totalLowConfidenceProducts} products individually
+              <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Bottom actions */}
@@ -775,13 +644,12 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
         <div className="flex items-center gap-2">
           <p className="text-[12px] text-[#6b7280]">
             {confirmedCount > 0
-              ? `${confirmedCount} categor${confirmedCount === 1 ? "y" : "ies"} confirmed (${totalConfirmedGtins.toLocaleString()} GTINs) — ready for enrichment.`
+              ? `${confirmedCount} categor${confirmedCount === 1 ? "y" : "ies"} confirmed (${totalConfirmedProducts.toLocaleString()} Products) — ready for enrichment.`
               : "Confirm at least one category to begin enrichment."}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {batchConfirmed ? (
-            /* After "Confirm All" — offer undo of the batch action */
             <button
               onClick={handleUndoConfirmAll}
               className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#fef2f2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dc2626]"
@@ -805,8 +673,8 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, sourceContex
               style={{ backgroundColor: "#1a5fa6" }}
             >
               {allConfirmed
-                ? `Proceed with All ${totalCount} Categories (${totalConfirmedGtins.toLocaleString()} GTINs)`
-                : `Proceed with ${confirmedCount} Confirmed Categor${confirmedCount === 1 ? "y" : "ies"} (${totalConfirmedGtins.toLocaleString()} GTINs)`}
+                ? `Proceed with All ${totalCount} Categories (${totalConfirmedProducts.toLocaleString()} Products)`
+                : `Proceed with ${confirmedCount} Confirmed Categor${confirmedCount === 1 ? "y" : "ies"} (${totalConfirmedProducts.toLocaleString()} Products)`}
             </button>
           )}
         </div>
