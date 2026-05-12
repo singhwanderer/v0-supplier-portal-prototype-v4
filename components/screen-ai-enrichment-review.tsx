@@ -262,9 +262,9 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "070 - 9", valueApplied: "Clarks" },
-      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "070 - 9", valueApplied: "Clarks" },
-      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "080 - 10", valueApplied: "Clarks" },
+      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "10070 - 9", valueApplied: "Clarks" },
+      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "10070 - 9", valueApplied: "Clarks" },
+      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "10080 - 10", valueApplied: "Clarks" },
     ],
   },
   {
@@ -273,8 +273,8 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "060 - 7", valueApplied: "Adidas" },
-      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "060 - 7", valueApplied: "Adidas" },
+      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "10060 - 7", valueApplied: "Adidas" },
+      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "10060 - 7", valueApplied: "Adidas" },
     ],
   },
   {
@@ -283,7 +283,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "030 - 1", valueApplied: "New Balance" },
+      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "10030 - 1", valueApplied: "New Balance" },
     ],
   },
   {
@@ -292,7 +292,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.97,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "080 - 10", valueApplied: "Clarks" },
+      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "10080 - 10", valueApplied: "Clarks" },
     ],
   },
   {
@@ -301,7 +301,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "060 - 7", valueApplied: "Timberland" },
+      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "10060 - 7", valueApplied: "Timberland" },
     ],
   },
   {
@@ -310,7 +310,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.42,
     source: null,
     childGtins: [
-      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "080 - 10", valueApplied: "—" },
+      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "10080 - 10", valueApplied: "—" },
     ],
   },
   {
@@ -319,7 +319,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "080 - 10", valueApplied: "Adidas" },
+      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "10080 - 10", valueApplied: "Adidas" },
     ],
   },
   {
@@ -328,7 +328,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "080 - 10", valueApplied: "New Balance" },
+      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "10080 - 10", valueApplied: "New Balance" },
     ],
   },
 ]
@@ -860,30 +860,47 @@ const handleConfirmComplete = () => {
       </div>
 
       {/* Batch Actions — Change 4: Toggles that set intention, not immediate persist */}
-      <div className="flex flex-col gap-2 p-3 bg-[#f0f9ff] border border-[#bfdbfe] rounded">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-[#1e40af]">Batch Select:</span>
-          {[95, 90, 80].map((threshold) => (
-            <button
-              key={threshold}
-              onClick={() => toggleBatchThreshold(threshold)}
-              className={`px-2 py-1 text-[12px] rounded transition-colors ${
-                batchSelectedThreshold === threshold
-                  ? "bg-[#dcfce7] border-2 border-[#22c55e] text-[#166534] font-semibold"
-                  : "bg-white border border-[#1e40af] text-[#1e40af] hover:bg-[#eff6ff]"
-              }`}
-            >
-              {threshold}%+ {batchSelectedThreshold === threshold && "✓"}
-            </button>
-          ))}
+      <div className="flex flex-col gap-4 p-3 bg-white border border-[#d1d5db] rounded">
+        {/* Fix E: Row 1 - Batch Select (left-aligned) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-semibold text-[#1e40af]">Batch Select:</span>
+            {[95, 90, 80].map((threshold) => (
+              <button
+                key={threshold}
+                onClick={() => toggleBatchThreshold(threshold)}
+                className={`px-2 py-1 text-[12px] rounded transition-colors ${
+                  batchSelectedThreshold === threshold
+                    ? "bg-[#dcfce7] border-2 border-[#22c55e] text-[#166534] font-semibold"
+                    : "bg-white border border-[#1e40af] text-[#1e40af] hover:bg-[#eff6ff]"
+                }`}
+              >
+                {threshold}%+ {batchSelectedThreshold === threshold && "✓"}
+              </button>
+            ))}
+            {batchSelectedThreshold && (
+              <button
+                onClick={() => toggleBatchThreshold(batchSelectedThreshold)}
+                className="px-2 py-1 text-[12px] text-[#dc2626] hover:underline"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+          {/* Change 4: Note about batch selection being intention, not persist */}
           {batchSelectedThreshold && (
-            <button
-              onClick={() => toggleBatchThreshold(batchSelectedThreshold)}
-              className="px-2 py-1 text-[12px] text-[#dc2626] hover:underline"
-            >
-              Clear selection
-            </button>
+            <p className="text-[11px] text-[#6b7280] italic">
+              Batch selection sets your intention — click &quot;Complete Enrichment&quot; to save all changes.
+            </p>
           )}
+        </div>
+
+        {/* Fix E: Visual divider between Batch Select and Filter */}
+        <div className="border-t border-[#e5e7eb]" />
+
+        {/* Fix E: Row 2 - Low Confidence Filter (right-aligned, separate container styling) */}
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-[12px] font-semibold text-[#6b7280]">Filter:</span>
           <button
             type="button"
             role="switch"
@@ -892,7 +909,7 @@ const handleConfirmComplete = () => {
               setShowLowConfidenceOnly((prev) => !prev)
               setCurrentPage(1)
             }}
-            className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f59e0b] ${
+            className={`flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f59e0b] ${
               showLowConfidenceOnly
                 ? "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
                 : "bg-white border-[#d1d5db] text-[#6b7280] hover:border-[#f59e0b] hover:text-[#92400e]"
@@ -908,12 +925,6 @@ const handleConfirmComplete = () => {
             Low Confidence Only (&lt;85%)
           </button>
         </div>
-        {/* Change 4: Note about batch selection being intention, not persist */}
-        {batchSelectedThreshold && (
-          <p className="text-[11px] text-[#6b7280] italic">
-            Batch selection sets your intention — click &quot;Complete Enrichment&quot; to save all changes.
-          </p>
-        )}
       </div>
 
       {/* Stats — Change 1: Products instead of GTINs */}

@@ -46,40 +46,6 @@ const LOW_CONFIDENCE_CATEGORIES: BrickCategory[] = [
   { id: "lc4", name: "Could not classify",      brickCode: "",         productCount: 4, gtinCount: 8,  confidence: 0,  confirmed: false },
 ]
 
-// Segment tiles shown when confidence < 70. Each tile carries a plain-language reason — no GPC/brick mentioned.
-const FALLBACK_SEGMENTS: { id: string; label: string; reason: string }[] = [
-  { id: "footwear",  label: "Footwear",            reason: "Based on your size codes and product description" },
-  { id: "sleepwear", label: "Sleepwear",           reason: "Based on fabric and product naming patterns" },
-  { id: "jewellery", label: "Jewellery & Watches", reason: "Based on material terms in your descriptions" },
-]
-
-// Sub-options within each segment. Brick codes are carried silently until the user confirms.
-const FALLBACK_SUB_OPTIONS: Record<string, { name: string; brickCode: string }[]> = {
-  footwear: [
-    { name: "Shoes - General Purpose",             brickCode: "10001077" },
-    { name: "Boots - General Purpose",             brickCode: "10001076" },
-    { name: "Athletic Footwear - General Purpose", brickCode: "10001070" },
-  ],
-  sleepwear: [
-    { name: "Dressing Gowns",            brickCode: "10001338" },
-    { name: "Night Dresses/Shirts",      brickCode: "10001339" },
-    { name: "Sleep Trousers/Shorts",     brickCode: "10001341" },
-    { name: "Sleepwear Variety Packs",   brickCode: "10001358" },
-  ],
-  jewellery: [
-    { name: "Anklets",                   brickCode: "10001083" },
-    { name: "Bracelets",                 brickCode: "10001084" },
-    { name: "Brooches",                  brickCode: "10001085" },
-    { name: "Cuff-links",                brickCode: "10001086" },
-    { name: "Earrings/Body Jewellery",   brickCode: "10001087" },
-    { name: "Necklaces/Necklets",        brickCode: "10001090" },
-    { name: "Pendants",                  brickCode: "10001091" },
-    { name: "Rings",                     brickCode: "10001092" },
-    { name: "Tiaras",                    brickCode: "10001093" },
-    { name: "Watches",                   brickCode: "10001105" },
-  ],
-}
-
 // Change 1: Sample PRODUCTS shown in the "Review individually" table for the unclassified section
 interface UncertainProduct { id: string; description: string; gtinCount: number }
 const SAMPLE_UNCERTAIN_PRODUCTS: UncertainProduct[] = [
@@ -93,24 +59,9 @@ const SAMPLE_UNCERTAIN_PRODUCTS: UncertainProduct[] = [
   { id: "prod8", description: "Pearl drop earring set",             gtinCount: 1 },
 ]
 
-// Per-card picker state: quick-pick (segment tiles) vs. individual-review (per-GTIN table)
-type PickerMode = "quick" | "individual"
-type PickerState = { mode: PickerMode; segmentId: string | null }
-
-// Each GTIN's assignment is encoded as "segmentId:brickCode" — null means unassigned
-type Assignments = Record<string, string | null>
-
 export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList }: ScreenBrickConfirmationProps) {
   // Merge high-confidence and low-confidence categories into a single list
   const [categories, setCategories] = useState<BrickCategory[]>([...INITIAL_CATEGORIES, ...LOW_CONFIDENCE_CATEGORIES])
-  // Keyed by uncertain-card id → picker state
-  const [pickerState, setPickerState] = useState<Record<string, PickerState>>({})
-  // Keyed by uncertain-card id → per-GTIN assignment map
-  const [assignments, setAssignments] = useState<Record<string, Assignments>>({})
-  // Keyed by uncertain-card id → selected GTINs for bulk-apply
-  const [bulkSelected, setBulkSelected] = useState<Record<string, Set<string>>>({})
-  // Bulk-apply dropdown value per card
-  const [bulkValue, setBulkValue] = useState<Record<string, string>>({})
   // Track whether "Confirm All" batch action was used (enables batch undo)
   const [batchConfirmed, setBatchConfirmed] = useState(false)
   // Snapshot of which category ids were confirmed before the batch action (for precise undo)
@@ -188,138 +139,22 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
     onProceedToEnrichment(toEnrich)
   }
 
-  // Fallback picker handlers
-  const openSegment = (cardId: string, segmentId: string) =>
-    setPickerState((prev) => ({ ...prev, [cardId]: { mode: "quick", segmentId } }))
-
-  const resetSegment = (cardId: string) =>
-    setPickerState((prev) => ({ ...prev, [cardId]: { mode: "quick", segmentId: null } }))
-
-  const openIndividual = (cardId: string) => {
-    setPickerState((prev) => ({ ...prev, [cardId]: { mode: "individual", segmentId: null } }))
-    // Seed empty assignments map for this card if not present
-    setAssignments((prev) => (prev[cardId] ? prev : { ...prev, [cardId]: {} }))
-    setBulkSelected((prev) => (prev[cardId] ? prev : { ...prev, [cardId]: new Set() }))
+  // Fix A: Handler for "View N Products" on low-confidence cards — navigates to category detail
+  const handleViewLowConfidenceProducts = (categoryId: string, categoryName: string, brickCode: string) => {
+    onViewGtins(categoryId, categoryName, brickCode)
   }
 
-  const backToQuickPick = (cardId: string) =>
-    setPickerState((prev) => ({ ...prev, [cardId]: { mode: "quick", segmentId: null } }))
-
-  // Resolve an uncertain card once the supplier picks a sub-option: morph it into a confirmed category (quick path).
-  const resolveUncertainCard = (cardId: string, option: { name: string; brickCode: string }) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.id === cardId
-          ? { ...cat, name: option.name, brickCode: option.brickCode, confidence: 100, confirmed: true }
-          : cat
-      )
-    )
-    setPickerState((prev) => { const next = { ...prev }; delete next[cardId]; return next })
+  // Fix A: Handler for "Assign Individually" on Could not classify card
+  const handleAssignIndividually = () => {
+    // This would navigate to individual product assignment UI
+    // For now, we log it; in a real app, this would call a handler passed via props
+    console.log("[v0] Navigating to individual product assignment view")
   }
 
-  // Individual-review: set assignment for a single GTIN
-  const setGtinAssignment = (cardId: string, gtin: string, value: string | null) =>
-    setAssignments((prev) => ({ ...prev, [cardId]: { ...(prev[cardId] ?? {}), [gtin]: value } }))
-
-  // Individual-review: toggle a GTIN in the bulk-selected set
-  const toggleBulkSelected = (cardId: string, gtin: string) =>
-    setBulkSelected((prev) => {
-      const current = new Set(prev[cardId] ?? new Set<string>())
-      if (current.has(gtin)) current.delete(gtin)
-      else current.add(gtin)
-      return { ...prev, [cardId]: current }
-    })
-
-  const toggleBulkAll = (cardId: string) =>
-    setBulkSelected((prev) => {
-      const current = prev[cardId] ?? new Set<string>()
-      if (current.size === SAMPLE_UNCERTAIN_PRODUCTS.length) return { ...prev, [cardId]: new Set() }
-      return { ...prev, [cardId]: new Set(SAMPLE_UNCERTAIN_PRODUCTS.map((p) => p.id)) }
-    })
-
-  // Apply the selected category to every GTIN in the bulk-selected set
-  const applyBulkValue = (cardId: string) => {
-    const value = bulkValue[cardId]
-    const selected = bulkSelected[cardId]
-    if (!value || !selected || selected.size === 0) return
-    setAssignments((prev) => {
-      const cardAssignments = { ...(prev[cardId] ?? {}) }
-      selected.forEach((g) => { cardAssignments[g] = value })
-      return { ...prev, [cardId]: cardAssignments }
-    })
-    // Clear selection + dropdown after apply
-    setBulkSelected((prev) => ({ ...prev, [cardId]: new Set() }))
-    setBulkValue((prev) => ({ ...prev, [cardId]: "" }))
-  }
-
-  // Save individual assignments: move assigned GTINs to confirmed categories while keeping the
-  // uncertain card alive (with reduced count) until ALL GTINs are resolved.
-  const saveIndividualAssignments = (cardId: string) => {
-    const card = categories.find((c) => c.id === cardId)
-    if (!card) return
-    const cardAssignments = assignments[cardId] ?? {}
-    const assignedGtins = Object.entries(cardAssignments).filter(([, v]) => Boolean(v))
-    if (assignedGtins.length === 0) return
-
-    // Count GTINs per (segmentId:brickCode)
-    const counts: Record<string, number> = {}
-    assignedGtins.forEach(([, key]) => { counts[key as string] = (counts[key as string] ?? 0) + 1 })
-
-    const keys = Object.keys(counts)
-    const totalAssigned = assignedGtins.length
-    const remainingCount = card.gtinCount - totalAssigned
-
-    // Build new confirmed category cards for the assigned GTINs
-    const newCategories: BrickCategory[] = keys.map((key, idx) => {
-      const [segmentId, brickCode] = key.split(":")
-      const option = FALLBACK_SUB_OPTIONS[segmentId].find((o) => o.brickCode === brickCode)!
-      return {
-        id: `${cardId}-split-${Date.now()}-${idx}`,
-        name: option.name,
-        brickCode: option.brickCode,
-        gtinCount: counts[key],
-        confidence: 100,
-        confirmed: true,
-      }
-    })
-
-    setCategories((prev) => {
-      const idx = prev.findIndex((c) => c.id === cardId)
-      if (idx === -1) return prev
-      const next = [...prev]
-
-      if (remainingCount > 0) {
-        // Keep uncertain card alive with reduced count; insert new categories after it
-        next[idx] = { ...card, gtinCount: remainingCount }
-        next.splice(idx + 1, 0, ...newCategories)
-      } else {
-        // All GTINs resolved — replace the uncertain card entirely
-        next.splice(idx, 1, ...newCategories)
-        // Clean up picker state since card is gone
-        setPickerState((p) => { const n = { ...p }; delete n[cardId]; return n })
-      }
-      return next
-    })
-
-    // Clear out saved assignments for the GTINs that were just resolved
-    setAssignments((prev) => {
-      const remaining: Assignments = {}
-      Object.entries(prev[cardId] ?? {}).forEach(([g, v]) => {
-        if (!v) remaining[g] = v // keep unassigned GTINs
-      })
-      if (remainingCount > 0) return { ...prev, [cardId]: remaining }
-      const next = { ...prev }
-      delete next[cardId]
-      return next
-    })
-    setBulkSelected((prev) => {
-      if (remainingCount > 0) return { ...prev, [cardId]: new Set() }
-      const next = { ...prev }; delete next[cardId]; return next
-    })
-    setBulkValue((prev) => {
-      if (remainingCount > 0) return { ...prev, [cardId]: "" }
-      const next = { ...prev }; delete next[cardId]; return next
-    })
+  // Fix A: Handler for "Review all N products individually" link
+  const handleReviewAllIndividually = () => {
+    // This would navigate to individual product assignment UI for ALL unclassified products
+    console.log("[v0] Navigating to review all unclassified products individually")
   }
 
   return (
@@ -598,7 +433,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
                     </p>
                   </div>
                   <button
-                    onClick={() => openIndividual(unclassifiableCategory.id)}
+                    onClick={handleAssignIndividually}
                     className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
                   >
                     Assign Individually
@@ -612,7 +447,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
           {/* Link to review all products individually */}
           <div className="pt-3 border-t border-[#fde68a]">
             <button
-              onClick={() => openIndividual("all-low-confidence")}
+              onClick={handleReviewAllIndividually}
               className="inline-flex items-center gap-1.5 text-[12px] text-[#1a5fa6] font-medium hover:underline"
             >
               <ListChecks className="w-3.5 h-3.5" aria-hidden="true" />
