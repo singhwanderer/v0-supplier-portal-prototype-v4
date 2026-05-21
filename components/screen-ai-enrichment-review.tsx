@@ -1306,7 +1306,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                 ) : isBelowThreshold ? (
                                   <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
                                 ) : (
-                                  <span className="text-[12px] font-semibold text-[#1a1f2e]">{product.suggestedValue}</span>
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[12px] font-semibold text-[#1a1f2e]">{product.suggestedValue}</span>
+                                    {product.source && (
+                                      <span className="text-[10px] text-[#6b7280] italic">{product.source}</span>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                               <td className="px-3 py-2.5 text-center">
