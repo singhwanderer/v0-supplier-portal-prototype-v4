@@ -1122,9 +1122,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 const s = productStates[`${group.attributeName}|${p.product}`] || "pending"
                 return s === "confirmed" || s === "batch-selected"
               }).length
-              const avgConfidence = Math.round(
-                group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length
-              )
+              // Use the ATTRIBUTES definition's avgConfidence (not GTIN average) so the
+              // "needs review" badge and confidence bar reflect per-attribute design data
+              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+              const avgConfidence = attrDef
+                ? Math.round(attrDef.avgConfidence * 100)
+                : Math.round(group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length)
               // Row is fully confirmed when all above-threshold products are confirmed/batch-selected
               const eligibleProducts = BRAND_NAME_PRODUCTS.filter((p) => Math.round(p.confidence * 100) >= 60)
               const allConfirmed = eligibleProducts.length > 0 && eligibleProducts.every((p) => {
@@ -1155,11 +1158,10 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <span className="font-semibold text-[#1a1f2e]">{group.attributeName}</span>
                         {allConfirmed ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
-                        ) : avgConfidence < 90 ? (
-                          // Show "Needs review" when avgConfidence is orange (<90%) or red (<80%)
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
-                        ) : BRAND_NAME_PRODUCTS.some((p) => p.suggestedValue === null) ? (
-                          // Also show "Needs review" when any product has empty/null value
+                        ) : (avgConfidence < 90 || attrDef?.needsReview) ? (
+                          // "Needs review" when: (a) avg confidence is orange/red (<90%),
+                          // (b) attribute has no value, or (c) VALUE confidence is orange/red.
+                          // needsReview flag in ATTRIBUTES covers cases (b) and (c).
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
                         ) : null}
                       </div>
