@@ -1153,7 +1153,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <span className="font-semibold text-[#1a1f2e]">{group.attributeName}</span>
                         {allConfirmed ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
-                        ) : avgConfidence < 90 ? (
+                        ) : avgConfidence < 90 || BRAND_NAME_PRODUCTS.some((p) => p.suggestedValue === null || Math.round(p.confidence * 100) < 90) ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
                         ) : null}
                       </div>
@@ -1217,8 +1217,14 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide text-center">Actions</td>
                       </tr>
                       
-                      {/* Product rows from mock data */}
-                      {BRAND_NAME_PRODUCTS.map((product) => {
+                      {/* Product rows from mock data - filtered when Low Confidence toggle is active */}
+                      {BRAND_NAME_PRODUCTS
+                        .filter((product) => {
+                          // When low confidence filter is active, only show products with confidence < 90%
+                          if (!showLowConfidenceOnly) return true
+                          return Math.round(product.confidence * 100) < 90
+                        })
+                        .map((product) => {
                         const confidencePercent = Math.round(product.confidence * 100)
                         const isBelowThreshold = confidencePercent < 60
                         const isProductGtinsExpanded = expandedProductGtins.has(product.product)
@@ -1397,7 +1403,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                           <tr key={child.gtin} className="border-b border-[#f3f4f6] last:border-0">
                                             <td className="px-8 py-1.5 font-mono text-[10px] text-[#374151]">{child.gtin}</td>
                                             <td className="px-3 py-1.5 text-[#374151]">{child.colorCode}</td>
-                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode}</td>
+                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode.split(" - ")[0]}</td>
                                             <td className="px-3 py-1.5 text-[#374151]">{child.valueApplied}</td>
                                           </tr>
                                         ))}
