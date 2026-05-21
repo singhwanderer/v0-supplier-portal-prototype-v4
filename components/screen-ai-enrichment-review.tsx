@@ -505,9 +505,10 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const [batchSelectedThreshold, setBatchSelectedThreshold] = useState<number | null>(null)
   // Fix 1B: Track which products have their GTIN sub-table expanded
   const [expandedProductGtins, setExpandedProductGtins] = useState<Set<string>>(new Set())
-  // Bug fix: Track product-level confirmed/rejected state (keyed by "attrName|productName")
-  const [productStates, setProductStates] = useState<Record<string, "pending" | "confirmed" | "rejected">>({})
-  // Bug fix: Track which product is currently being edited (keyed by "attrName|productName")
+  // Product-level state — keyed by "attrName|productName"
+  // "batch-selected" = included by a batch threshold click (intention, not yet saved)
+  const [productStates, setProductStates] = useState<Record<string, "pending" | "confirmed" | "rejected" | "batch-selected">>({})
+  // Track which product is currently being edited
   const [editingProduct, setEditingProduct] = useState<{ attribute: string; product: string } | null>(null)
   const [editProductValue, setEditProductValue] = useState("")
   const itemsPerPage = 25
@@ -538,16 +539,21 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     })
   }
 
-  // Bug fix: Handler to confirm all products for an attribute
+  // Confirm all (non-rejected, non-below-threshold) products for an attribute
   const confirmAllProducts = (attributeName: string) => {
-    const updates: Record<string, string> = {}
-    BRAND_NAME_PRODUCTS.forEach((product) => {
-      const key = `${attributeName}|${product.product}`
-      if (productStates[key] !== "confirmed") {
-        updates[key] = "confirmed"
-      }
+    setProductStates((prev) => {
+      const next = { ...prev }
+      BRAND_NAME_PRODUCTS.forEach((product) => {
+        const confidencePercent = Math.round(product.confidence * 100)
+        const key = `${attributeName}|${product.product}`
+        const current = next[key] || "pending"
+        // Confirm pending and batch-selected (skip already-confirmed, rejected, and <60% items)
+        if ((current === "pending" || current === "batch-selected") && confidencePercent >= 60) {
+          next[key] = "confirmed"
+        }
+      })
+      return next
     })
-    setProductStates((prev) => ({ ...prev, ...updates }))
   }
 
   const rejectAllForAttribute = (attrName: string) => {
@@ -560,40 +566,41 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     )
   }
 
-  // Change 4: Batch confirm is now a toggle that sets "batch-selected" status, not immediate confirm
+  // Batch confirm: toggle a threshold. Same button = undo. Only one active at a time.
   const toggleBatchThreshold = (threshold: number) => {
+    const thresholdDecimal = threshold / 100
+
     if (batchSelectedThreshold === threshold) {
-      // Same threshold clicked again — undo the batch selection
+      // Same threshold — undo all batch-selected product states back to pending
       setBatchSelectedThreshold(null)
-      setAttributeGroups((prev) =>
-        prev.map((group) => ({
-          ...group,
-          gtins: group.gtins.map((g) =>
-            g.status === "batch-selected" ? { ...g, status: "pending" } : g
-          ),
-        }))
-      )
+      setProductStates((prev) => {
+        const next = { ...prev }
+        Object.keys(next).forEach((key) => {
+          if (next[key] === "batch-selected") next[key] = "pending"
+        })
+        return next
+      })
     } else {
-      // New threshold — first clear any prior batch selection, then apply new one
+      // New threshold — clear prior batch selections then mark qualifying pending products
       setBatchSelectedThreshold(threshold)
-      setAttributeGroups((prev) =>
-        prev.map((group) => ({
-          ...group,
-          gtins: group.gtins.map((g) => {
-            // Remove prior batch-selected status
-            if (g.status === "batch-selected") {
-              return g.confidence >= threshold
-                ? { ...g, status: "batch-selected" as const }
-                : { ...g, status: "pending" }
+      setProductStates((prev) => {
+        const next = { ...prev }
+        // First clear any existing batch-selected states
+        Object.keys(next).forEach((key) => {
+          if (next[key] === "batch-selected") next[key] = "pending"
+        })
+        // Mark each product that meets threshold and is still pending
+        BRAND_NAME_PRODUCTS.forEach((product) => {
+          ATTRIBUTES.forEach((attr) => {
+            const key = `${attr.name}|${product.product}`
+            const currentState = next[key] || "pending"
+            if (currentState === "pending" && product.confidence >= thresholdDecimal) {
+              next[key] = "batch-selected"
             }
-            // Mark pending items at or above threshold as batch-selected
-            if (g.status === "pending" && g.confidence >= threshold) {
-              return { ...g, status: "batch-selected" as const }
-            }
-            return g
-          }),
-        }))
-      )
+          })
+        })
+        return next
+      })
     }
   }
 
@@ -631,20 +638,14 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   }
 
   const undoAllForAttribute = (attrName: string) => {
-    setAttributeGroups((prev) =>
-      prev.map((group) =>
-        group.attributeName === attrName
-          ? {
-              ...group,
-              gtins: group.gtins.map((g) =>
-                g.status === "confirmed" || g.status === "edited"
-                  ? { ...g, status: "pending", userValue: undefined }
-                  : g
-              ),
-            }
-          : group
-      )
-    )
+    // Reset all product-level states for this attribute back to pending
+    setProductStates((prev) => {
+      const next = { ...prev }
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(`${attrName}|`)) next[key] = "pending"
+      })
+      return next
+    })
   }
 
   const rejectGtin = (attrName: string, gtin: string) => {
@@ -743,41 +744,42 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setEditValue("")
   }
 
-  // Calculate stats
-  // Prompt 2: Total Attributes = sum of all productsApplicable values from ATTRIBUTES (1,439)
+  // ── Stats calculations (all driven by productStates) ──────────────────────
   const totalAttributes = ATTRIBUTES.reduce((sum, attr) => sum + attr.productsApplicable, 0)
-  // Change 4: Include batch-selected items in count
-  const confirmedAttributes = attributeGroups.reduce(
-  (sum, g) => sum + g.gtins.filter((gt) => gt.status === "confirmed" || gt.status === "edited" || gt.status === "batch-selected").length,
-  0
-  )
-  const pendingAttributes = totalAttributes - confirmedAttributes
-  const confirmedPercentage = Math.round((confirmedAttributes / totalAttributes) * 100)
+  const totalProducts = metadata.products || Math.ceil(metadata.gtins / 2.3)
 
-  // Attribute-level review progress (for progress indicator in header)
-  // Prompt 2: Use ATTRIBUTES.length (14) for total attribute count
+  // Count product-attribute pairs that are confirmed, edited, or batch-selected
+  const confirmedOrBatchStates = Object.values(productStates).filter(
+    (s) => s === "confirmed" || s === "batch-selected"
+  ).length
+  // Products Enriched tile = unique products that have at least one confirmed/batch-selected state
+  const enrichedProductSet = new Set(
+    Object.entries(productStates)
+      .filter(([, s]) => s === "confirmed" || s === "batch-selected")
+      .map(([key]) => key.split("|")[1])
+  )
+  const gtinsEnriched = enrichedProductSet.size
+
+  const pendingAttributes = totalAttributes - confirmedOrBatchStates
+  const confirmedPercentage = totalAttributes > 0
+    ? Math.round((confirmedOrBatchStates / totalAttributes) * 100)
+    : 0
+
+  const enrichedGtinPercent = totalProducts > 0
+    ? Math.round((gtinsEnriched / totalProducts) * 100)
+    : 0
+
+  // Header progress: attribute rows where all BRAND_NAME_PRODUCTS are confirmed/batch-selected
   const totalAttributeRows = ATTRIBUTES.length
-  const reviewedAttributeRows = attributeGroups.filter(
-    (g) => g.gtins.every((gt) => gt.status === "confirmed" || gt.status === "edited")
+  const reviewedAttributeRows = ATTRIBUTES.filter((attr) =>
+    BRAND_NAME_PRODUCTS.filter((p) => Math.round(p.confidence * 100) >= 60).every((product) => {
+      const state = productStates[`${attr.name}|${product.product}`] || "pending"
+      return state === "confirmed" || state === "batch-selected"
+    })
   ).length
   const attributeReviewPercent = Math.round((reviewedAttributeRows / totalAttributeRows) * 100)
 
-  // Change 4: Include batch-selected items in enriched count (they'll be confirmed on Complete)
-  const gtinConfirmedMap: Record<string, number> = {}
-  attributeGroups.forEach((group) => {
-    group.gtins.forEach((gt) => {
-      if (gt.status === "confirmed" || gt.status === "edited" || gt.status === "batch-selected") {
-        gtinConfirmedMap[gt.gtin] = (gtinConfirmedMap[gt.gtin] || 0) + 1
-      }
-    })
-  })
-  const gtinsEnriched = Object.keys(gtinConfirmedMap).length
-  // % of GTINs that have at least one confirmed attribute. Drives "AI Enriched" status (≥ 50%).
-  const enrichedGtinPercent = metadata.gtins > 0
-    ? Math.round((gtinsEnriched / metadata.gtins) * 100)
-    : 0
-  // User can complete enrichment as soon as at least one attribute value has been confirmed.
-  const canComplete = confirmedAttributes > 0
+  const canComplete = confirmedOrBatchStates > 0
 
   // Filter and paginate GTINs for expanded view
   const getFilteredAndPaginatedGtins = (gtins: GTINAttribute[]) => {
@@ -806,18 +808,17 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setShowConfirmDialog(true)
   }
 
-const handleConfirmComplete = () => {
-  // Change 4: Convert all batch-selected items to confirmed before completing
-  setAttributeGroups((prev) =>
-    prev.map((group) => ({
-      ...group,
-      gtins: group.gtins.map((g) =>
-        g.status === "batch-selected" ? { ...g, status: "confirmed" } : g
-      ),
-    }))
-  )
-  setShowConfirmDialog(false)
-  onComplete(enrichedGtinPercent, [code])
+  const handleConfirmComplete = () => {
+    // Convert all batch-selected product states to confirmed on save
+    setProductStates((prev) => {
+      const next = { ...prev }
+      Object.keys(next).forEach((key) => {
+        if (next[key] === "batch-selected") next[key] = "confirmed"
+      })
+      return next
+    })
+    setShowConfirmDialog(false)
+    onComplete(enrichedGtinPercent, [code])
   }
 
   const handleCancelComplete = () => {
@@ -1071,23 +1072,28 @@ const handleConfirmComplete = () => {
             </tr>
           </thead>
           {attributeGroups
-            // When the low-confidence filter is active, only show attribute rows where at least
-            // one GTIN has an AI confidence score below 85%.
+            // Low Confidence filter: show only attributes where at least one product suggestion
+            // is below 80% confidence (spec-defined threshold).
             .filter((group) =>
-              !showLowConfidenceOnly || group.gtins.some((g) => g.confidence < 85)
+              !showLowConfidenceOnly || BRAND_NAME_PRODUCTS.some((p) => p.confidence < 0.80)
             )
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
-              // Bug fix: Get product count from ATTRIBUTES (not GTINs count) for consistent alignment
-              const attrData = ATTRIBUTES.find(a => a.name === group.attributeName)
-              const totalProductsForAttr = metadata.products || Math.ceil(metadata.gtins / 2.3) // Use same value as Total Products tile
-              const confirmedProductCount = Object.keys(productStates).filter(
-                key => key.startsWith(`${group.attributeName}|`) && (productStates[key] === "confirmed" || productStates[key] === "rejected")
-              ).length
+              const totalProductsForAttr = totalProducts
+              // Count products that are confirmed or batch-selected for this attribute
+              const confirmedProductCount = BRAND_NAME_PRODUCTS.filter((p) => {
+                const s = productStates[`${group.attributeName}|${p.product}`] || "pending"
+                return s === "confirmed" || s === "batch-selected"
+              }).length
               const avgConfidence = Math.round(
                 group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length
               )
-              const allConfirmed = confirmedProductCount >= totalProductsForAttr
+              // Row is fully confirmed when all above-threshold products are confirmed/batch-selected
+              const eligibleProducts = BRAND_NAME_PRODUCTS.filter((p) => Math.round(p.confidence * 100) >= 60)
+              const allConfirmed = eligibleProducts.length > 0 && eligibleProducts.every((p) => {
+                const s = productStates[`${group.attributeName}|${p.product}`] || "pending"
+                return s === "confirmed" || s === "batch-selected"
+              })
 
               return (
                 <tbody key={group.attributeName} id={`attr-row-${group.attributeName.replace(/\s+/g, "-").toLowerCase()}`}>
@@ -1185,6 +1191,7 @@ const handleConfirmComplete = () => {
                         const productState = productStates[productKey] || "pending"
                         const isEditing = editingProduct?.attribute === group.attributeName && editingProduct?.product === product.product
                         const isConfirmed = productState === "confirmed"
+                        const isBatchSelected = productState === "batch-selected"
                         const isRejected = productState === "rejected"
                         
                         return (
@@ -1195,6 +1202,8 @@ const handleConfirmComplete = () => {
                               className={`border-b ${
                                 isConfirmed
                                   ? "border-[#bbf7d0] bg-[#f0fdf4]"
+                                  : isBatchSelected
+                                  ? "border-[#bfdbfe] bg-[#eff6ff]"
                                   : isRejected
                                   ? "border-[#fecaca] bg-[#fef2f2]"
                                   : isBelowThreshold
@@ -1250,11 +1259,22 @@ const handleConfirmComplete = () => {
                               </td>
                               <td className="px-3 py-2.5 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
-                                  {/* Show confirmed state with Undo */}
                                   {isConfirmed ? (
                                     <>
-                                      <span className="flex items-center gap-1 text-[11px] font-semibold text-[#166534]">
+                                      <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
                                         <Check className="w-3.5 h-3.5" /> Confirmed
+                                      </span>
+                                      <button
+                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
+                                      >
+                                        Undo
+                                      </button>
+                                    </>
+                                  ) : isBatchSelected ? (
+                                    <>
+                                      <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#dbeafe] text-[#1e40af] border border-[#93c5fd]">
+                                        Batch selected
                                       </span>
                                       <button
                                         onClick={() => undoProduct(group.attributeName, product.product)}
