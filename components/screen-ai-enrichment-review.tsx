@@ -256,6 +256,7 @@ interface ProductAttributeRow {
 
 // Exact mock data from specification for expanded attribute view
 // Includes products at various confidence levels (99%, 97%, 80%, 70%, 60%, 42%) for testing thresholds
+// Size codes are 5-digit format only (no suffix)
 const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
   {
     product: "Men's Oxford Dress Shoe",
@@ -263,9 +264,9 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "10070 - 9", valueApplied: "Clarks" },
-      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "10070 - 9", valueApplied: "Clarks" },
-      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "10080 - 10", valueApplied: "Clarks" },
+      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "10070", valueApplied: "Clarks" },
+      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "10070", valueApplied: "Clarks" },
+      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "10080", valueApplied: "Clarks" },
     ],
   },
   {
@@ -274,8 +275,8 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "10060 - 7", valueApplied: "Adidas" },
-      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "10060 - 7", valueApplied: "Adidas" },
+      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "10060", valueApplied: "Adidas" },
+      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "10060", valueApplied: "Adidas" },
     ],
   },
   {
@@ -284,7 +285,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "10030 - 1", valueApplied: "New Balance" },
+      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "10030", valueApplied: "New Balance" },
     ],
   },
   {
@@ -293,7 +294,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.97,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "10080 - 10", valueApplied: "Clarks" },
+      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "10080", valueApplied: "Clarks" },
     ],
   },
   {
@@ -302,7 +303,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "10060 - 7", valueApplied: "Timberland" },
+      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "10060", valueApplied: "Timberland" },
     ],
   },
   // Products at 80% confidence — testable for 80%+ threshold
@@ -312,7 +313,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.80,
     source: "Matched from brand database",
     childGtins: [
-      { gtin: "0888546413260", colorCode: "001 - Black", sizeCode: "10070 - 9", valueApplied: "Converse" },
+      { gtin: "0888546413260", colorCode: "001 - Black", sizeCode: "10070", valueApplied: "Converse" },
     ],
   },
   {
@@ -321,7 +322,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.79,
     source: "Matched from brand database",
     childGtins: [
-      { gtin: "0888546413270", colorCode: "008 - Beige", sizeCode: "10060 - 7", valueApplied: "Toms" },
+      { gtin: "0888546413270", colorCode: "008 - Beige", sizeCode: "10060", valueApplied: "Toms" },
     ],
   },
   // Products at 70% confidence — testable for low confidence filter
@@ -331,7 +332,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.70,
     source: "Partial match from description",
     childGtins: [
-      { gtin: "0888546413280", colorCode: "001 - Black", sizeCode: "10080 - 10", valueApplied: "Dr. Martens" },
+      { gtin: "0888546413280", colorCode: "001 - Black", sizeCode: "10080", valueApplied: "Dr. Martens" },
     ],
   },
   {
@@ -340,7 +341,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.68,
     source: "Partial match from description",
     childGtins: [
-      { gtin: "0888546413290", colorCode: "006 - Tan", sizeCode: "10060 - 7", valueApplied: "Steve Madden" },
+      { gtin: "0888546413290", colorCode: "006 - Tan", sizeCode: "10060", valueApplied: "Steve Madden" },
     ],
   },
   // Products at 60% confidence — edge of confirmable threshold
@@ -350,7 +351,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.60,
     source: "Low confidence match",
     childGtins: [
-      { gtin: "0888546413300", colorCode: "004 - Grey", sizeCode: "10080 - 10", valueApplied: "Under Armour" },
+      { gtin: "0888546413300", colorCode: "004 - Grey", sizeCode: "10080", valueApplied: "Under Armour" },
     ],
   },
   // Products below 60% — not confirmable, shows N/A
@@ -360,7 +361,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.42,
     source: null,
     childGtins: [
-      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "10080 - 10", valueApplied: "—" },
+      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "10080", valueApplied: "—" },
     ],
   },
   {
@@ -369,7 +370,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "10080 - 10", valueApplied: "Adidas" },
+      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "10080", valueApplied: "Adidas" },
     ],
   },
   {
@@ -378,7 +379,7 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
     confidence: 0.99,
     source: "Extracted from product title",
     childGtins: [
-      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "10080 - 10", valueApplied: "New Balance" },
+      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "10080", valueApplied: "New Balance" },
     ],
   },
 ]
@@ -416,20 +417,21 @@ interface FootwearAttributeDef {
 
 // Prompt 2: Exact attribute list from specification — 14 attributes, no Advertised Origin, no Toe Shape
 // avgConfidence values include a spread for testing all confidence bands and the <90% low-confidence toggle
+// Minority have needsReview: true (only those with orange/red confidence < 90%)
 const ATTRIBUTES = [
   { name: "Brand Name",           productsApplicable: 125, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
   { name: "Care Instructions",    productsApplicable: 108, avgConfidence: 0.93, needsReview: false }, // ≥90%: green
-  { name: "Closure",              productsApplicable: 112, avgConfidence: 0.75, needsReview: true  }, // 80–60%: red
+  { name: "Closure",              productsApplicable: 112, avgConfidence: 0.75, needsReview: true  }, // 80–60%: red - needs review
   { name: "Country of Origin",    productsApplicable: 125, avgConfidence: 0.92, needsReview: false }, // ≥90%: green
-  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.68, needsReview: true }, // 80–60%: red
+  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
   { name: "Faux Fur",             productsApplicable: 85,  avgConfidence: 0.95, needsReview: false }, // ≥90%: green
   { name: "Gender",               productsApplicable: 102, avgConfidence: 0.97, needsReview: false }, // ≥90%: green
-  { name: "Heel Height",          productsApplicable: 110, avgConfidence: 0.84, needsReview: true  }, // 90–80%: orange
-  { name: "Lining Material",      productsApplicable: 96,  avgConfidence: 0.72, needsReview: true  }, // 80–60%: red
+  { name: "Heel Height",          productsApplicable: 110, avgConfidence: 0.84, needsReview: true  }, // 90–80%: orange - needs review
+  { name: "Lining Material",      productsApplicable: 96,  avgConfidence: 0.92, needsReview: false }, // ≥90%: green
   { name: "Open/Closed Toe",      productsApplicable: 105, avgConfidence: 0.90, needsReview: false }, // exactly 90%: green
-  { name: "Shoe Type",            productsApplicable: 88,  avgConfidence: 0.88, needsReview: true  }, // 90–80%: orange
-  { name: "Sole Material",        productsApplicable: 92,  avgConfidence: 0.65, needsReview: true  }, // 80–60%: red
-  { name: "Upper Material",       productsApplicable: 118, avgConfidence: 0.82, needsReview: true  }, // 90–80%: orange
+  { name: "Shoe Type",            productsApplicable: 88,  avgConfidence: 0.93, needsReview: false }, // ≥90%: green
+  { name: "Sole Material",        productsApplicable: 92,  avgConfidence: 0.65, needsReview: true  }, // 80–60%: red - needs review
+  { name: "Upper Material",       productsApplicable: 118, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
   { name: "Waterproof",           productsApplicable: 75,  avgConfidence: 0.94, needsReview: false }, // ≥90%: green
 ]
 
@@ -834,8 +836,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
   // Filter and paginate GTINs for expanded view
   const getFilteredAndPaginatedGtins = (gtins: GTINAttribute[]) => {
-    // When the low-confidence toggle is active, only show GTINs below 85% confidence
-    let filtered = showLowConfidenceOnly ? gtins.filter((g) => g.confidence < 85) : gtins
+    // When the low-confidence toggle is active, only show GTINs below 90% confidence
+    let filtered = showLowConfidenceOnly ? gtins.filter((g) => g.confidence < 90) : gtins
     
     // Default: sort low-confidence (<70%) first for immediate attention
     filtered.sort((a, b) => {
@@ -1153,7 +1155,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <span className="font-semibold text-[#1a1f2e]">{group.attributeName}</span>
                         {allConfirmed ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
-                        ) : avgConfidence < 90 || BRAND_NAME_PRODUCTS.some((p) => p.suggestedValue === null || Math.round(p.confidence * 100) < 90) ? (
+                        ) : avgConfidence < 90 ? (
+                          // Show "Needs review" when avgConfidence is orange (<90%) or red (<80%)
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
+                        ) : BRAND_NAME_PRODUCTS.some((p) => p.suggestedValue === null) ? (
+                          // Also show "Needs review" when any product has empty/null value
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
                         ) : null}
                       </div>
@@ -1403,7 +1409,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                           <tr key={child.gtin} className="border-b border-[#f3f4f6] last:border-0">
                                             <td className="px-8 py-1.5 font-mono text-[10px] text-[#374151]">{child.gtin}</td>
                                             <td className="px-3 py-1.5 text-[#374151]">{child.colorCode}</td>
-                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode.split(" - ")[0]}</td>
+                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode}</td>
                                             <td className="px-3 py-1.5 text-[#374151]">{child.valueApplied}</td>
                                           </tr>
                                         ))}
