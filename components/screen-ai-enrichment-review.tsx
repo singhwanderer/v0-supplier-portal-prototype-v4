@@ -415,22 +415,22 @@ interface FootwearAttributeDef {
 }
 
 // Prompt 2: Exact attribute list from specification — 14 attributes, no Advertised Origin, no Toe Shape
-// Modified to include varying avgConfidence values for testing low-confidence filter
+// avgConfidence values include a spread for testing all confidence bands and the <90% low-confidence toggle
 const ATTRIBUTES = [
-  { name: "Brand Name", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
-  { name: "Care Instructions", productsApplicable: 108, avgConfidence: 0.90, needsReview: false },
-  { name: "Closure", productsApplicable: 112, avgConfidence: 0.75, needsReview: true }, // Low confidence for testing
-  { name: "Country of Origin", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
-  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.68, needsReview: true }, // Low confidence
-  { name: "Faux Fur", productsApplicable: 85, avgConfidence: 0.90, needsReview: false },
-  { name: "Gender", productsApplicable: 102, avgConfidence: 0.90, needsReview: false },
-  { name: "Heel Height", productsApplicable: 110, avgConfidence: 0.72, needsReview: true }, // Low confidence
-  { name: "Lining Material", productsApplicable: 96, avgConfidence: 0.90, needsReview: false },
-  { name: "Open/Closed Toe", productsApplicable: 105, avgConfidence: 0.90, needsReview: false },
-  { name: "Shoe Type", productsApplicable: 88, avgConfidence: 0.91, needsReview: false },
-  { name: "Sole Material", productsApplicable: 92, avgConfidence: 0.65, needsReview: true }, // Low confidence
-  { name: "Upper Material", productsApplicable: 118, avgConfidence: 0.78, needsReview: true }, // Low confidence
-  { name: "Waterproof", productsApplicable: 75, avgConfidence: 0.92, needsReview: false },
+  { name: "Brand Name",           productsApplicable: 125, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
+  { name: "Care Instructions",    productsApplicable: 108, avgConfidence: 0.93, needsReview: false }, // ≥90%: green
+  { name: "Closure",              productsApplicable: 112, avgConfidence: 0.75, needsReview: true  }, // 80–60%: red
+  { name: "Country of Origin",    productsApplicable: 125, avgConfidence: 0.92, needsReview: false }, // ≥90%: green
+  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.68, needsReview: true }, // 80–60%: red
+  { name: "Faux Fur",             productsApplicable: 85,  avgConfidence: 0.95, needsReview: false }, // ≥90%: green
+  { name: "Gender",               productsApplicable: 102, avgConfidence: 0.97, needsReview: false }, // ≥90%: green
+  { name: "Heel Height",          productsApplicable: 110, avgConfidence: 0.84, needsReview: true  }, // 90–80%: orange
+  { name: "Lining Material",      productsApplicable: 96,  avgConfidence: 0.72, needsReview: true  }, // 80–60%: red
+  { name: "Open/Closed Toe",      productsApplicable: 105, avgConfidence: 0.90, needsReview: false }, // exactly 90%: green
+  { name: "Shoe Type",            productsApplicable: 88,  avgConfidence: 0.88, needsReview: true  }, // 90–80%: orange
+  { name: "Sole Material",        productsApplicable: 92,  avgConfidence: 0.65, needsReview: true  }, // 80–60%: red
+  { name: "Upper Material",       productsApplicable: 118, avgConfidence: 0.82, needsReview: true  }, // 90–80%: orange
+  { name: "Waterproof",           productsApplicable: 75,  avgConfidence: 0.94, needsReview: false }, // ≥90%: green
 ]
 
 // FOOTWEAR_ATTRIBUTES for attribute suggestions and brick mapping
@@ -1003,7 +1003,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 ? "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
                 : "bg-white border-[#d1d5db] text-[#6b7280] hover:border-[#f59e0b] hover:text-[#92400e]"
             }`}
-            title="Toggle to show only attributes and products with AI confidence below 85%"
+            title="Toggle to show only attributes and products with AI confidence below 90%"
           >
             <span
               className={`w-3 h-3 rounded-full border-2 transition-colors ${
@@ -1011,7 +1011,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               }`}
               aria-hidden="true"
             />
-            Low Confidence Only (&lt;85%)
+            Low Confidence Only (&lt;90%)
           </button>
         </div>
       </div>
@@ -1105,12 +1105,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             </tr>
           </thead>
           {attributeGroups
-            // Low Confidence filter: show only attributes where avgConfidence < 80%
-            // (i.e., the attribute has at least one product suggestion below 80%).
+            // Low Confidence filter: show only attributes where avgConfidence < 90%
+            // (i.e., the attribute has at least one product suggestion below 90%).
             .filter((group) => {
               if (!showLowConfidenceOnly) return true
               const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
-              return attrDef ? attrDef.avgConfidence < 0.80 : false
+              return attrDef ? attrDef.avgConfidence < 0.90 : false
             })
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
@@ -1153,7 +1153,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <span className="font-semibold text-[#1a1f2e]">{group.attributeName}</span>
                         {allConfirmed ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
-                        ) : group.gtins.some((g) => g.confidence < 70) ? (
+                        ) : avgConfidence < 90 ? (
                           <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
                         ) : null}
                       </div>
@@ -1282,11 +1282,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                   <div className="flex items-center justify-center gap-1.5">
                                     <div className="w-10 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
                                       <div
-                                        className="h-full bg-[#2e7d32]"
+                                        className={`h-full ${confidencePercent >= 90 ? "bg-[#2e7d32]" : confidencePercent >= 80 ? "bg-[#f59e0b]" : "bg-[#dc2626]"}`}
                                         style={{ width: `${confidencePercent}%` }}
                                       />
                                     </div>
-                                    <span className="text-[11px] font-medium text-[#6b7280]">
+                                    <span className={`text-[11px] font-medium ${confidencePercent >= 90 ? "text-[#6b7280]" : confidencePercent >= 80 ? "text-[#b45309]" : "text-[#dc2626]"}`}>
                                       {confidencePercent}%
                                     </span>
                                   </div>
