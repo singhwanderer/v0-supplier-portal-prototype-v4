@@ -415,24 +415,35 @@ interface FootwearAttributeDef {
   appliesTo: ("10001077" | "10001076" | "10001070")[]
 }
 
-// Prompt 2: Exact attribute list from specification — 14 attributes, no Advertised Origin, no Toe Shape
-// avgConfidence values include a spread for testing all confidence bands and the <90% low-confidence toggle
-// Minority have needsReview: true (only those with orange/red confidence < 90%)
+// 14 attributes per specification.
+// avgConfidence: attribute-level average used for the confidence bar and avg-confidence badge rule.
+// minProductConfidence: lowest individual product VALUE confidence for this attribute — drives the
+//   "VALUE confidence is orange/red" badge rule independently of avgConfidence.
+// needsReview is derived at render time from avgConfidence and minProductConfidence; not stored here.
 const ATTRIBUTES = [
-  { name: "Brand Name",           productsApplicable: 125, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
-  { name: "Care Instructions",    productsApplicable: 108, avgConfidence: 0.93, needsReview: false }, // ≥90%: green
-  { name: "Closure",              productsApplicable: 112, avgConfidence: 0.75, needsReview: true  }, // 80–60%: red - needs review
-  { name: "Country of Origin",    productsApplicable: 125, avgConfidence: 0.92, needsReview: false }, // ≥90%: green
-  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
-  { name: "Faux Fur",             productsApplicable: 85,  avgConfidence: 0.95, needsReview: false }, // ≥90%: green
-  { name: "Gender",               productsApplicable: 102, avgConfidence: 0.97, needsReview: false }, // ≥90%: green
-  { name: "Heel Height",          productsApplicable: 110, avgConfidence: 0.84, needsReview: true  }, // 90–80%: orange - needs review
-  { name: "Lining Material",      productsApplicable: 96,  avgConfidence: 0.92, needsReview: false }, // ≥90%: green
-  { name: "Open/Closed Toe",      productsApplicable: 105, avgConfidence: 0.90, needsReview: false }, // exactly 90%: green
-  { name: "Shoe Type",            productsApplicable: 88,  avgConfidence: 0.93, needsReview: false }, // ≥90%: green
-  { name: "Sole Material",        productsApplicable: 92,  avgConfidence: 0.65, needsReview: true  }, // 80–60%: red - needs review
-  { name: "Upper Material",       productsApplicable: 118, avgConfidence: 0.91, needsReview: false }, // ≥90%: green
-  { name: "Waterproof",           productsApplicable: 75,  avgConfidence: 0.94, needsReview: false }, // ≥90%: green
+  // ── Green attributes (avg ≥90%, all product values ≥90%) — no "Needs review" ──────────────────
+  { name: "Brand Name",              productsApplicable: 125, avgConfidence: 0.96, minProductConfidence: 0.97 },
+  { name: "Care Instructions",       productsApplicable: 108, avgConfidence: 0.94, minProductConfidence: 0.92 },
+  { name: "Country of Origin",       productsApplicable: 125, avgConfidence: 0.93, minProductConfidence: 0.91 },
+  { name: "Faux Fur",                productsApplicable: 85,  avgConfidence: 0.95, minProductConfidence: 0.93 },
+  { name: "Gender",                  productsApplicable: 102, avgConfidence: 0.97, minProductConfidence: 0.96 },
+  { name: "Lining Material",         productsApplicable: 96,  avgConfidence: 0.92, minProductConfidence: 0.90 },
+  { name: "Open/Closed Toe",         productsApplicable: 105, avgConfidence: 0.91, minProductConfidence: 0.90 },
+  { name: "Shoe Type",               productsApplicable: 88,  avgConfidence: 0.93, minProductConfidence: 0.91 },
+  { name: "Waterproof",              productsApplicable: 75,  avgConfidence: 0.94, minProductConfidence: 0.92 },
+  // ── Needs review: avg confidence orange/red (avg < 90%) ─────────────────────────────────────────
+  { name: "Heel Height",             productsApplicable: 110, avgConfidence: 0.84, minProductConfidence: 0.91 },
+  // avg is orange (84%) → "Needs review" from rule (c), even though product values are green
+  { name: "Sole Material",           productsApplicable: 92,  avgConfidence: 0.67, minProductConfidence: 0.90 },
+  // avg is red (67%) → "Needs review" from rule (c)
+  // ── Needs review: VALUE confidence orange/red (minProductConfidence < 90%) ───────────────────────
+  { name: "Closure",                 productsApplicable: 112, avgConfidence: 0.91, minProductConfidence: 0.79 },
+  // avg is green but a product value is 79% (red) → "Needs review" from rule (b)
+  { name: "Fabric or Material Code", productsApplicable: 98,  avgConfidence: 0.90, minProductConfidence: 0.83 },
+  // avg is green but a product value is 83% (orange) → "Needs review" from rule (b)
+  // ── Needs review: attribute has no value (null suggestedValue) ───────────────────────────────────
+  { name: "Upper Material",          productsApplicable: 118, avgConfidence: 0.91, minProductConfidence: null },
+  // null minProductConfidence represents an attribute with no suggested value → rule (a)
 ]
 
 // FOOTWEAR_ATTRIBUTES for attribute suggestions and brick mapping
@@ -1156,14 +1167,22 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-[#1a1f2e]">{group.attributeName}</span>
-                        {allConfirmed ? (
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
-                        ) : (avgConfidence < 90 || attrDef?.needsReview) ? (
-                          // "Needs review" when: (a) avg confidence is orange/red (<90%),
-                          // (b) attribute has no value, or (c) VALUE confidence is orange/red.
-                          // needsReview flag in ATTRIBUTES covers cases (b) and (c).
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
-                        ) : null}
+                        {(() => {
+                          // Rule (a): attribute has no suggested value
+                          const hasNoValue = attrDef?.minProductConfidence === null
+                          // Rule (b): VALUE confidence is orange/red (< 90%)
+                          const valueIsLow = attrDef?.minProductConfidence != null && attrDef.minProductConfidence < 0.90
+                          // Rule (c): avg confidence is orange/red (< 90%)
+                          const avgIsLow = avgConfidence < 90
+                          const showNeedsReview = !allConfirmed && (hasNoValue || valueIsLow || avgIsLow)
+                          if (allConfirmed) {
+                            return <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
+                          }
+                          if (showNeedsReview) {
+                            return <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
+                          }
+                          return null
+                        })()}
                       </div>
                       {!hasExpandedOnce && group.attributeName === attributeGroups[0]?.attributeName && (
                         <p className="text-[10px] text-[#9ca3af] mt-0.5 italic">Click to expand and review</p>
