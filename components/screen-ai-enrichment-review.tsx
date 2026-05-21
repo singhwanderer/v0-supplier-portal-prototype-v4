@@ -538,22 +538,16 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     })
   }
 
-  const confirmAllForAttribute = (attrName: string) => {
-    setAttributeGroups((prev) =>
-      prev.map((group) =>
-        group.attributeName === attrName
-          ? {
-              ...group,
-              // Skip GTINs that are suppressed (confidence < 60 and no user-entered value) —
-              // those require the user to enter a value before they can be confirmed.
-              gtins: group.gtins.map((g) => {
-                const isSuppressed = g.confidence < 60 && g.status !== "edited"
-                return g.status === "pending" && !isSuppressed ? { ...g, status: "confirmed" } : g
-              }),
-            }
-          : group
-      )
-    )
+  // Bug fix: Handler to confirm all products for an attribute
+  const confirmAllProducts = (attributeName: string) => {
+    const updates: Record<string, string> = {}
+    BRAND_NAME_PRODUCTS.forEach((product) => {
+      const key = `${attributeName}|${product.product}`
+      if (productStates[key] !== "confirmed") {
+        updates[key] = "confirmed"
+      }
+    })
+    setProductStates((prev) => ({ ...prev, ...updates }))
   }
 
   const rejectAllForAttribute = (attrName: string) => {
@@ -1160,10 +1154,10 @@ const handleConfirmComplete = () => {
                           </div>
                         ) : (
                           <button
-                            onClick={() => confirmAllForAttribute(group.attributeName)}
+                            onClick={() => confirmAllProducts(group.attributeName)}
                             className="px-3 py-1.5 text-[12px] font-semibold text-white rounded bg-[#1a5fa6] hover:bg-[#1a4f8c] transition-colors whitespace-nowrap"
                           >
-                            Confirm All ({group.gtins.filter(g => g.status === "pending" && !(g.confidence < 60)).length})
+                            Confirm All ({totalProductsForAttr - confirmedProductCount})
                           </button>
                         )}
                       </div>
