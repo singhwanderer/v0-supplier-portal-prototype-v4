@@ -255,6 +255,7 @@ interface ProductAttributeRow {
 }
 
 // Exact mock data from specification for expanded attribute view
+// Includes products at various confidence levels (99%, 97%, 80%, 70%, 60%, 42%) for testing thresholds
 const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
   {
     product: "Men's Oxford Dress Shoe",
@@ -304,6 +305,55 @@ const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
       { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "10060 - 7", valueApplied: "Timberland" },
     ],
   },
+  // Products at 80% confidence — testable for 80%+ threshold
+  {
+    product: "Canvas High-Top Sneaker",
+    suggestedValue: "Converse",
+    confidence: 0.80,
+    source: "Matched from brand database",
+    childGtins: [
+      { gtin: "0888546413260", colorCode: "001 - Black", sizeCode: "10070 - 9", valueApplied: "Converse" },
+    ],
+  },
+  {
+    product: "Slip-On Espadrille",
+    suggestedValue: "Toms",
+    confidence: 0.79,
+    source: "Matched from brand database",
+    childGtins: [
+      { gtin: "0888546413270", colorCode: "008 - Beige", sizeCode: "10060 - 7", valueApplied: "Toms" },
+    ],
+  },
+  // Products at 70% confidence — testable for low confidence filter
+  {
+    product: "Leather Ankle Boot",
+    suggestedValue: "Dr. Martens",
+    confidence: 0.70,
+    source: "Partial match from description",
+    childGtins: [
+      { gtin: "0888546413280", colorCode: "001 - Black", sizeCode: "10080 - 10", valueApplied: "Dr. Martens" },
+    ],
+  },
+  {
+    product: "Strappy Flat Sandal",
+    suggestedValue: "Steve Madden",
+    confidence: 0.68,
+    source: "Partial match from description",
+    childGtins: [
+      { gtin: "0888546413290", colorCode: "006 - Tan", sizeCode: "10060 - 7", valueApplied: "Steve Madden" },
+    ],
+  },
+  // Products at 60% confidence — edge of confirmable threshold
+  {
+    product: "Athletic Training Shoe",
+    suggestedValue: "Under Armour",
+    confidence: 0.60,
+    source: "Low confidence match",
+    childGtins: [
+      { gtin: "0888546413300", colorCode: "004 - Grey", sizeCode: "10080 - 10", valueApplied: "Under Armour" },
+    ],
+  },
+  // Products below 60% — not confirmable, shows N/A
   {
     product: "Suede Chelsea Boot",
     suggestedValue: null,
@@ -365,20 +415,21 @@ interface FootwearAttributeDef {
 }
 
 // Prompt 2: Exact attribute list from specification — 14 attributes, no Advertised Origin, no Toe Shape
+// Modified to include varying avgConfidence values for testing low-confidence filter
 const ATTRIBUTES = [
   { name: "Brand Name", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
   { name: "Care Instructions", productsApplicable: 108, avgConfidence: 0.90, needsReview: false },
-  { name: "Closure", productsApplicable: 112, avgConfidence: 0.90, needsReview: true },
+  { name: "Closure", productsApplicable: 112, avgConfidence: 0.75, needsReview: true }, // Low confidence for testing
   { name: "Country of Origin", productsApplicable: 125, avgConfidence: 0.90, needsReview: false },
-  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.90, needsReview: true },
+  { name: "Fabric or Material Code", productsApplicable: 98, avgConfidence: 0.68, needsReview: true }, // Low confidence
   { name: "Faux Fur", productsApplicable: 85, avgConfidence: 0.90, needsReview: false },
   { name: "Gender", productsApplicable: 102, avgConfidence: 0.90, needsReview: false },
-  { name: "Heel Height", productsApplicable: 110, avgConfidence: 0.90, needsReview: false },
+  { name: "Heel Height", productsApplicable: 110, avgConfidence: 0.72, needsReview: true }, // Low confidence
   { name: "Lining Material", productsApplicable: 96, avgConfidence: 0.90, needsReview: false },
   { name: "Open/Closed Toe", productsApplicable: 105, avgConfidence: 0.90, needsReview: false },
   { name: "Shoe Type", productsApplicable: 88, avgConfidence: 0.91, needsReview: false },
-  { name: "Sole Material", productsApplicable: 92, avgConfidence: 0.89, needsReview: false },
-  { name: "Upper Material", productsApplicable: 118, avgConfidence: 0.88, needsReview: true },
+  { name: "Sole Material", productsApplicable: 92, avgConfidence: 0.65, needsReview: true }, // Low confidence
+  { name: "Upper Material", productsApplicable: 118, avgConfidence: 0.78, needsReview: true }, // Low confidence
   { name: "Waterproof", productsApplicable: 75, avgConfidence: 0.92, needsReview: false },
 ]
 
@@ -985,24 +1036,6 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         </div>
       </div>
 
-      {/* Progress indicator — reflects GTIN-level enrichment, which drives the Selection Code status */}
-      {enrichedGtinPercent > 0 && enrichedGtinPercent < 50 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded border bg-[#fef3c7] border-[#fcd34d] text-[#92400e]">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="text-[13px] font-medium">
-            {gtinsEnriched} of {metadata.gtins} GTINs enriched ({enrichedGtinPercent}%) — reach 50% to mark this Selection Code as &quot;AI Enriched&quot;
-          </span>
-        </div>
-      )}
-      {enrichedGtinPercent >= 50 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded border bg-[#dcfce7] border-[#86efac] text-[#166534]">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="text-[13px] font-medium">
-            {gtinsEnriched} of {metadata.gtins} GTINs enriched ({enrichedGtinPercent}%) — Status will update to &quot;AI Enriched&quot; on completion
-          </span>
-        </div>
-      )}
-
       {pendingAttributes > 0 && (
         <div className="flex items-center gap-2 px-4 py-2 rounded border bg-[#fef3c7] border-[#fcd34d] text-[#92400e]">
           <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1072,11 +1105,13 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             </tr>
           </thead>
           {attributeGroups
-            // Low Confidence filter: show only attributes where at least one product suggestion
-            // is below 80% confidence (spec-defined threshold).
-            .filter((group) =>
-              !showLowConfidenceOnly || BRAND_NAME_PRODUCTS.some((p) => p.confidence < 0.80)
-            )
+            // Low Confidence filter: show only attributes where avgConfidence < 80%
+            // (i.e., the attribute has at least one product suggestion below 80%).
+            .filter((group) => {
+              if (!showLowConfidenceOnly) return true
+              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+              return attrDef ? attrDef.avgConfidence < 0.80 : false
+            })
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
               const totalProductsForAttr = totalProducts
@@ -1274,7 +1309,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                   ) : isBatchSelected ? (
                                     <>
                                       <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#dbeafe] text-[#1e40af] border border-[#93c5fd]">
-                                        Batch selected
+                                        Batch-confirmed
                                       </span>
                                       <button
                                         onClick={() => undoProduct(group.attributeName, product.product)}
