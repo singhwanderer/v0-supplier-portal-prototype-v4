@@ -963,10 +963,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
       {/* Batch Actions — Change 4: Toggles that set intention, not immediate persist */}
       <div className="flex flex-col gap-4 p-3 bg-white border border-[#d1d5db] rounded">
-        {/* Fix E: Row 1 - Batch Select (left-aligned) */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-[#1e40af]">Batch Select:</span>
+        {/* Fix E: Row 1 - Batch Confirm (left-aligned) */}
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-semibold text-[#1e40af]">Batch Confirm:</span>
             {[95, 90, 80].map((threshold) => (
               <button
                 key={threshold}
@@ -988,14 +987,13 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 Clear selection
               </button>
             )}
-          </div>
-          {/* Change 4: Note about batch selection being intention, not persist */}
-          {batchSelectedThreshold && (
-            <p className="text-[11px] text-[#6b7280] italic">
-              Batch selection sets your intention — click &quot;Complete Enrichment&quot; to save all changes.
-            </p>
-          )}
         </div>
+        {/* Change 4: Note about batch selection being intention, not persist */}
+        {batchSelectedThreshold && (
+          <p className="text-[11px] text-[#6b7280] italic">
+            Batch selection sets your intention — click &quot;Complete Enrichment&quot; to save all changes.
+          </p>
+        )}
 
         {/* Fix E: Visual divider between Batch Select and Filter */}
         <div className="border-t border-[#e5e7eb]" />
