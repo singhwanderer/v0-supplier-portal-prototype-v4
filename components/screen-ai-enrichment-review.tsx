@@ -1196,7 +1196,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                         <Check className="w-3.5 h-3.5" /> Confirmed
                                       </span>
                                       <button
-                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        onClick={() => undoProduct(group.attributeName, gtin.productDescription)}
                                         className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
                                       >
                                         Undo
@@ -1208,7 +1208,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                         Batch-confirmed
                                       </span>
                                       <button
-                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        onClick={() => undoProduct(group.attributeName, gtin.productDescription)}
                                         className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
                                       >
                                         Undo
@@ -1220,7 +1220,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                         <X className="w-3.5 h-3.5" /> Rejected
                                       </span>
                                       <button
-                                        onClick={() => undoProduct(group.attributeName, product.product)}
+                                        onClick={() => undoProduct(group.attributeName, gtin.productDescription)}
                                         className="px-2 py-1 text-[11px] font-medium text-[#6b7280] hover:text-[#1a5fa6] hover:underline"
                                       >
                                         Undo
@@ -1229,7 +1229,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                   ) : isEditing ? (
                                     <>
                                       <button
-                                        onClick={() => saveProductEdit(group.attributeName, product.product)}
+                                        onClick={() => saveProductEdit(group.attributeName, gtin.productDescription)}
                                         className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
                                       >
                                         Save
@@ -1246,14 +1246,14 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                       {/* Fix 1B: When confidence < 60%, hide Confirm, show only Edit and Reject */}
                                       {!isBelowThreshold && (
                                         <button
-                                          onClick={() => confirmProduct(group.attributeName, product.product)}
+                                          onClick={() => confirmProduct(group.attributeName, gtin.productDescription)}
                                           className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
                                         >
                                           Confirm
                                         </button>
                                       )}
                                       <button
-                                        onClick={() => startProductEdit(group.attributeName, product.product, product.suggestedValue || "")}
+                                        onClick={() => startProductEdit(group.attributeName, gtin.productDescription, gtin.aiSuggestion || "")}
                                         className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
                                           isBelowThreshold
                                             ? "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff] font-semibold"
@@ -1263,7 +1263,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                         Edit
                                       </button>
                                       <button
-                                        onClick={() => rejectProduct(group.attributeName, product.product)}
+                                        onClick={() => rejectProduct(group.attributeName, gtin.productDescription)}
                                         className="px-2 py-1 text-[11px] font-medium border border-[#dc2626] text-[#dc2626] rounded hover:bg-[#fee2e2] transition-colors"
                                       >
                                         Reject
@@ -1274,29 +1274,27 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                               </td>
                             </tr>
                             
-                            {/* GTIN sub-table when expanded */}
+                            {/* GTIN sub-table when expanded - shows this single GTIN's details */}
                             {isProductGtinsExpanded && (
-                              <tr key={`${group.attributeName}-${product.product}-gtins`}>
+                              <tr key={`${group.attributeName}-${gtin.productDescription}-gtins`}>
                                 <td colSpan={5} className="p-0">
                                   <div className="bg-[#f9fafb] border-b border-[#e5e7eb]">
                                     <table className="w-full text-[11px]">
                                       <thead>
                                         <tr className="border-b border-[#e5e7eb]">
                                           <th className="text-left px-8 py-1.5 font-medium text-[#6b7280] w-40">GTIN</th>
-                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Color Code</th>
-                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Size Code</th>
-                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Value Applied</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">AI Suggestion</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Confidence</th>
+                                          <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Status</th>
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {product.childGtins.map((child) => (
-                                          <tr key={child.gtin} className="border-b border-[#f3f4f6] last:border-0">
-                                            <td className="px-8 py-1.5 font-mono text-[10px] text-[#374151]">{child.gtin}</td>
-                                            <td className="px-3 py-1.5 text-[#374151]">{child.colorCode}</td>
-                                            <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode}</td>
-                                            <td className="px-3 py-1.5 text-[#374151]">{child.valueApplied}</td>
-                                          </tr>
-                                        ))}
+                                        <tr className="border-b border-[#f3f4f6] last:border-0">
+                                          <td className="px-8 py-1.5 font-mono text-[10px] text-[#374151]">{gtin.gtin}</td>
+                                          <td className="px-3 py-1.5 text-[#374151]">{gtin.aiSuggestion || "—"}</td>
+                                          <td className="px-3 py-1.5 text-[#374151]">{confidencePercent}%</td>
+                                          <td className="px-3 py-1.5 text-[#374151] capitalize">{productState}</td>
+                                        </tr>
                                       </tbody>
                                     </table>
                                   </div>
