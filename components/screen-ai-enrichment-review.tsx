@@ -465,7 +465,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
       const group = attributeGroups.find((g) => g.attributeName === attributeName)
       if (group) {
         group.gtins.forEach((gtin) => {
-          const confidencePercent = Math.round(gtin.confidence * 100)
+          const confidencePercent = Math.round(gtin.confidence) // confidence is already 0-100
           const key = `${attributeName}|${gtin.productDescription}`
           const current = next[key] || "pending"
           // Confirm pending and batch-selected (skip already-confirmed, rejected, and <60% items)
@@ -490,7 +490,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
   // Batch confirm: toggle a threshold. Same button = undo. Only one active at a time.
   const toggleBatchThreshold = (threshold: number) => {
-    const thresholdDecimal = threshold / 100
+    // threshold is already a percentage (95, 90, 80), confidence is also 0-100
 
     if (batchSelectedThreshold === threshold) {
       // Same threshold — undo all batch-selected product states back to pending
@@ -516,7 +516,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
           group.gtins.forEach((gtin) => {
             const key = `${group.attributeName}|${gtin.productDescription}`
             const currentState = next[key] || "pending"
-            if (currentState === "pending" && gtin.confidence >= thresholdDecimal) {
+            if (currentState === "pending" && gtin.confidence >= threshold) {
               next[key] = "batch-selected"
             }
           })
@@ -694,7 +694,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   // Header progress: attribute rows where all per-attribute GTINs are confirmed/batch-selected
   const totalAttributeRows = ATTRIBUTES.length
   const reviewedAttributeRows = attributeGroups.filter((group) => {
-    const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence * 100) >= 60)
+    const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence) >= 60) // confidence is already 0-100
     return eligibleGtins.length > 0 && eligibleGtins.every((gtin) => {
       const state = productStates[`${group.attributeName}|${gtin.productDescription}`] || "pending"
       return state === "confirmed" || state === "batch-selected"
@@ -998,7 +998,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                 ? Math.round(attrDef.avgConfidence * 100)
                 : Math.round(group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length)
               // Row is fully confirmed when all above-threshold GTINs are confirmed/batch-selected
-              const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence * 100) >= 60)
+              const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence) >= 60)
               const allConfirmed = eligibleGtins.length > 0 && eligibleGtins.every((g) => {
                 const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
                 return s === "confirmed" || s === "batch-selected"
@@ -1107,10 +1107,10 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         .filter((gtin) => {
                           // When low confidence filter is active, only show GTINs with confidence < 90%
                           if (!showLowConfidenceOnly) return true
-                          return gtin.confidence < 0.90
+                          return gtin.confidence < 90 // confidence is already 0-100
                         })
                         .map((gtin) => {
-                        const confidencePercent = Math.round(gtin.confidence * 100)
+                        const confidencePercent = Math.round(gtin.confidence) // confidence is already 0-100
                         const isBelowThreshold = confidencePercent < 60
                         const isProductGtinsExpanded = expandedProductGtins.has(gtin.productDescription)
                         const productKey = `${group.attributeName}|${gtin.productDescription}`
