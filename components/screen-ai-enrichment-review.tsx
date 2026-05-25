@@ -407,9 +407,12 @@ function generateAttributeData(code: string, gtinCount: number, description: str
 export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Selection Code" }
+  // Source of truth: use products count from previous screen (e.g., 125 for "Shoes - General Purpose")
+  // Fall back to GTINs only if products is not provided
+  const totalProducts = metadata.products || metadata.gtins
   
   const [attributeGroups, setAttributeGroups] = useState<AttributeGroup[]>(() =>
-    generateAttributeData(code, metadata.gtins, metadata.description)
+    generateAttributeData(code, totalProducts, metadata.description)
   )
   const [expandedAttributes, setExpandedAttributes] = useState<Set<string>>(new Set())
   const [editingGtin, setEditingGtin] = useState<{ attribute: string; gtin: string } | null>(null)
@@ -667,9 +670,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   }
 
   // ── Stats calculations (all driven by productStates) ──────────────────────
-  // Total attributes = sum of actual GTINs across all attribute groups (not ATTRIBUTES.productsApplicable)
+  // Total attributes = sum of actual products across all attribute groups
   const totalAttributePairs = attributeGroups.reduce((sum, group) => sum + group.gtins.length, 0)
-  const totalProducts = metadata.products || Math.ceil(metadata.gtins / 2.3)
 
   // Count product-attribute pairs that are confirmed, edited, or batch-selected
   const confirmedOrBatchStates = Object.values(productStates).filter(
@@ -891,19 +893,15 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         </div>
       </div>
 
-      {/* Stats — Change 1: Products instead of GTINs */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Stats — Change 1: Products instead of GTINs, removed Products Enriched chip */}
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Products</p>
-          <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{metadata.products || Math.ceil(metadata.gtins / 2.3)}</p>
+          <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalProducts}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Attributes</p>
               <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalAttributePairs}</p>
-        </div>
-        <div className="bg-white border border-[#d1d5db] rounded p-4">
-          <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Products Enriched</p>
-          <p className="text-[24px] font-bold text-[#2e7d32] mt-1">{gtinsEnriched}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Confirmed</p>
@@ -1363,7 +1361,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             </div>
             <span className="text-[12px] text-[#6b7280]">|</span>
             <span className="text-[12px] text-[#6b7280]">
-              {gtinsEnriched} of {metadata.products || Math.ceil(metadata.gtins / 2.3)} products enriched ({enrichedGtinPercent}%)
+              {gtinsEnriched} of {totalProducts} products enriched ({enrichedGtinPercent}%)
             </span>
           </div>
           <button
@@ -1388,7 +1386,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-[13px] text-[#374151]">
                   <CheckCircle2 className="w-4 h-4 text-[#2e7d32] shrink-0" />
-                  <span><strong>{gtinsEnriched}</strong> of {metadata.products || Math.ceil(metadata.gtins / 2.3)} products enriched</span>
+                  <span><strong>{gtinsEnriched}</strong> of {totalProducts} products enriched</span>
                 </div>
                 <div className="flex items-center gap-2 text-[13px] text-[#374151]">
                   <CheckCircle2 className="w-4 h-4 text-[#2e7d32] shrink-0" />
