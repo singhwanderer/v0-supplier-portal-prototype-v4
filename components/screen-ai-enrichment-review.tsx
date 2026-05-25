@@ -667,7 +667,8 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   }
 
   // ── Stats calculations (all driven by productStates) ──────────────────────
-  const totalAttributes = ATTRIBUTES.reduce((sum, attr) => sum + attr.productsApplicable, 0)
+  // Total attributes = sum of actual GTINs across all attribute groups (not ATTRIBUTES.productsApplicable)
+  const totalAttributePairs = attributeGroups.reduce((sum, group) => sum + group.gtins.length, 0)
   const totalProducts = metadata.products || Math.ceil(metadata.gtins / 2.3)
 
   // Count product-attribute pairs that are confirmed, edited, or batch-selected
@@ -682,13 +683,14 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   )
   const gtinsEnriched = enrichedProductSet.size
 
-  const pendingAttributes = totalAttributes - confirmedOrBatchStates
-  const confirmedPercentage = totalAttributes > 0
-    ? Math.round((confirmedOrBatchStates / totalAttributes) * 100)
+  // Confirmed percentage = confirmed pairs / total pairs (capped at 100%)
+  const confirmedPercentage = totalAttributePairs > 0
+    ? Math.min(100, Math.round((confirmedOrBatchStates / totalAttributePairs) * 100))
     : 0
 
+  // Enriched percentage = unique enriched products / total products (capped at 100%)
   const enrichedGtinPercent = totalProducts > 0
-    ? Math.round((gtinsEnriched / totalProducts) * 100)
+    ? Math.min(100, Math.round((gtinsEnriched / totalProducts) * 100))
     : 0
 
   // Header progress: attribute rows where all per-attribute GTINs are confirmed/batch-selected
@@ -894,7 +896,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Attributes</p>
-          <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalAttributes}</p>
+              <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalAttributePairs}</p>
         </div>
         <div className="bg-white border border-[#d1d5db] rounded p-4">
           <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Products Enriched</p>
@@ -984,9 +986,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             })
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
-              // Use per-attribute product count from ATTRIBUTES definition
+              // Use the actual GTIN count from the generated data (not ATTRIBUTES.productsApplicable)
               const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
-              const totalProductsForAttr = attrDef?.productsApplicable || group.gtins.length
+              const totalProductsForAttr = group.gtins.length
               // Count GTINs that are confirmed or batch-selected for this attribute
               const confirmedProductCount = group.gtins.filter((g) => {
                 const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
