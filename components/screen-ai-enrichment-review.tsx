@@ -688,6 +688,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     ? Math.min(100, Math.round((confirmedOrBatchStates / totalAttributePairs) * 100))
     : 0
 
+  // Pending attributes = total pairs minus confirmed/batch-selected pairs
+  const pendingAttributes = totalAttributePairs - confirmedOrBatchStates
+
   // Enriched percentage = unique enriched products / total products (capped at 100%)
   const enrichedGtinPercent = totalProducts > 0
     ? Math.min(100, Math.round((gtinsEnriched / totalProducts) * 100))
