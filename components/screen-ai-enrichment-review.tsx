@@ -238,152 +238,6 @@ interface AttributeGroup {
   gtins: GTINAttribute[]
 }
 
-// Fix 1B: Product-level mock data for expanded attribute rows
-interface ProductChildGtin {
-  gtin: string
-  colorCode: string
-  sizeCode: string
-  valueApplied: string
-}
-
-interface ProductAttributeRow {
-  product: string
-  suggestedValue: string | null
-  confidence: number
-  source: string | null
-  childGtins: ProductChildGtin[]
-}
-
-// Exact mock data from specification for expanded attribute view
-// Includes products at various confidence levels (99%, 97%, 80%, 70%, 60%, 42%) for testing thresholds
-// Size codes are 5-digit format only (no suffix)
-const BRAND_NAME_PRODUCTS: ProductAttributeRow[] = [
-  {
-    product: "Men's Oxford Dress Shoe",
-    suggestedValue: "Clarks",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413183", colorCode: "001 - Black", sizeCode: "10070", valueApplied: "Clarks" },
-      { gtin: "0888546413184", colorCode: "002 - Brown", sizeCode: "10070", valueApplied: "Clarks" },
-      { gtin: "0888546413185", colorCode: "001 - Black", sizeCode: "10080", valueApplied: "Clarks" },
-    ],
-  },
-  {
-    product: "Women's Canvas Slip-on",
-    suggestedValue: "Adidas",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413190", colorCode: "010 - White", sizeCode: "10060", valueApplied: "Adidas" },
-      { gtin: "0888546413191", colorCode: "003 - Navy", sizeCode: "10060", valueApplied: "Adidas" },
-    ],
-  },
-  {
-    product: "Kids' Velcro Sneaker",
-    suggestedValue: "New Balance",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413200", colorCode: "005 - Red", sizeCode: "10030", valueApplied: "New Balance" },
-    ],
-  },
-  {
-    product: "Leather Moccasin Loafer",
-    suggestedValue: "Clarks",
-    confidence: 0.97,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413210", colorCode: "002 - Brown", sizeCode: "10080", valueApplied: "Clarks" },
-    ],
-  },
-  {
-    product: "Platform Wedge Sandal",
-    suggestedValue: "Timberland",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413220", colorCode: "010 - White", sizeCode: "10060", valueApplied: "Timberland" },
-    ],
-  },
-  // Products at 80% confidence — testable for 80%+ threshold
-  {
-    product: "Canvas High-Top Sneaker",
-    suggestedValue: "Converse",
-    confidence: 0.80,
-    source: "Matched from brand database",
-    childGtins: [
-      { gtin: "0888546413260", colorCode: "001 - Black", sizeCode: "10070", valueApplied: "Converse" },
-    ],
-  },
-  {
-    product: "Slip-On Espadrille",
-    suggestedValue: "Toms",
-    confidence: 0.79,
-    source: "Matched from brand database",
-    childGtins: [
-      { gtin: "0888546413270", colorCode: "008 - Beige", sizeCode: "10060", valueApplied: "Toms" },
-    ],
-  },
-  // Products at 70% confidence — testable for low confidence filter
-  {
-    product: "Leather Ankle Boot",
-    suggestedValue: "Dr. Martens",
-    confidence: 0.70,
-    source: "Partial match from description",
-    childGtins: [
-      { gtin: "0888546413280", colorCode: "001 - Black", sizeCode: "10080", valueApplied: "Dr. Martens" },
-    ],
-  },
-  {
-    product: "Strappy Flat Sandal",
-    suggestedValue: "Steve Madden",
-    confidence: 0.68,
-    source: "Partial match from description",
-    childGtins: [
-      { gtin: "0888546413290", colorCode: "006 - Tan", sizeCode: "10060", valueApplied: "Steve Madden" },
-    ],
-  },
-  // Products at 60% confidence — edge of confirmable threshold
-  {
-    product: "Athletic Training Shoe",
-    suggestedValue: "Under Armour",
-    confidence: 0.60,
-    source: "Low confidence match",
-    childGtins: [
-      { gtin: "0888546413300", colorCode: "004 - Grey", sizeCode: "10080", valueApplied: "Under Armour" },
-    ],
-  },
-  // Products below 60% — not confirmable, shows N/A
-  {
-    product: "Suede Chelsea Boot",
-    suggestedValue: null,
-    confidence: 0.42,
-    source: null,
-    childGtins: [
-      { gtin: "0888546413230", colorCode: "006 - Tan", sizeCode: "10080", valueApplied: "—" },
-    ],
-  },
-  {
-    product: "Mesh Running Trainer",
-    suggestedValue: "Adidas",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413240", colorCode: "005 - Red", sizeCode: "10080", valueApplied: "Adidas" },
-    ],
-  },
-  {
-    product: "Waterproof Hiking Shoe",
-    suggestedValue: "New Balance",
-    confidence: 0.99,
-    source: "Extracted from product title",
-    childGtins: [
-      { gtin: "0888546413250", colorCode: "004 - Grey", sizeCode: "10080", valueApplied: "New Balance" },
-    ],
-  },
-]
-
 // Reasoning patterns keyed to attribute names.
 // User-facing: only the product category matters; the underlying taxonomy is not surfaced.
 // Prompt 2: Removed Advertised Origin and Toe Shape, added Faux Fur
@@ -607,15 +461,19 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
   const confirmAllProducts = (attributeName: string) => {
     setProductStates((prev) => {
       const next = { ...prev }
-      BRAND_NAME_PRODUCTS.forEach((product) => {
-        const confidencePercent = Math.round(product.confidence * 100)
-        const key = `${attributeName}|${product.product}`
-        const current = next[key] || "pending"
-        // Confirm pending and batch-selected (skip already-confirmed, rejected, and <60% items)
-        if ((current === "pending" || current === "batch-selected") && confidencePercent >= 60) {
-          next[key] = "confirmed"
-        }
-      })
+      // Find the attribute group to get its GTINs
+      const group = attributeGroups.find((g) => g.attributeName === attributeName)
+      if (group) {
+        group.gtins.forEach((gtin) => {
+          const confidencePercent = Math.round(gtin.confidence * 100)
+          const key = `${attributeName}|${gtin.productDescription}`
+          const current = next[key] || "pending"
+          // Confirm pending and batch-selected (skip already-confirmed, rejected, and <60% items)
+          if ((current === "pending" || current === "batch-selected") && confidencePercent >= 60) {
+            next[key] = "confirmed"
+          }
+        })
+      }
       return next
     })
   }
@@ -653,12 +511,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
         Object.keys(next).forEach((key) => {
           if (next[key] === "batch-selected") next[key] = "pending"
         })
-        // Mark each product that meets threshold and is still pending
-        BRAND_NAME_PRODUCTS.forEach((product) => {
-          ATTRIBUTES.forEach((attr) => {
-            const key = `${attr.name}|${product.product}`
+        // Mark each GTIN that meets threshold and is still pending
+        attributeGroups.forEach((group) => {
+          group.gtins.forEach((gtin) => {
+            const key = `${group.attributeName}|${gtin.productDescription}`
             const currentState = next[key] || "pending"
-            if (currentState === "pending" && product.confidence >= thresholdDecimal) {
+            if (currentState === "pending" && gtin.confidence >= thresholdDecimal) {
               next[key] = "batch-selected"
             }
           })
@@ -833,14 +691,15 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     ? Math.round((gtinsEnriched / totalProducts) * 100)
     : 0
 
-  // Header progress: attribute rows where all BRAND_NAME_PRODUCTS are confirmed/batch-selected
+  // Header progress: attribute rows where all per-attribute GTINs are confirmed/batch-selected
   const totalAttributeRows = ATTRIBUTES.length
-  const reviewedAttributeRows = ATTRIBUTES.filter((attr) =>
-    BRAND_NAME_PRODUCTS.filter((p) => Math.round(p.confidence * 100) >= 60).every((product) => {
-      const state = productStates[`${attr.name}|${product.product}`] || "pending"
+  const reviewedAttributeRows = attributeGroups.filter((group) => {
+    const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence * 100) >= 60)
+    return eligibleGtins.length > 0 && eligibleGtins.every((gtin) => {
+      const state = productStates[`${group.attributeName}|${gtin.productDescription}`] || "pending"
       return state === "confirmed" || state === "batch-selected"
     })
-  ).length
+  }).length
   const attributeReviewPercent = Math.round((reviewedAttributeRows / totalAttributeRows) * 100)
 
   const canComplete = confirmedOrBatchStates > 0
@@ -1125,22 +984,23 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             })
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
-              const totalProductsForAttr = totalProducts
-              // Count products that are confirmed or batch-selected for this attribute
-              const confirmedProductCount = BRAND_NAME_PRODUCTS.filter((p) => {
-                const s = productStates[`${group.attributeName}|${p.product}`] || "pending"
+              // Use per-attribute product count from ATTRIBUTES definition
+              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+              const totalProductsForAttr = attrDef?.productsApplicable || group.gtins.length
+              // Count GTINs that are confirmed or batch-selected for this attribute
+              const confirmedProductCount = group.gtins.filter((g) => {
+                const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
                 return s === "confirmed" || s === "batch-selected"
               }).length
               // Use the ATTRIBUTES definition's avgConfidence (not GTIN average) so the
               // "needs review" badge and confidence bar reflect per-attribute design data
-              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
               const avgConfidence = attrDef
                 ? Math.round(attrDef.avgConfidence * 100)
                 : Math.round(group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length)
-              // Row is fully confirmed when all above-threshold products are confirmed/batch-selected
-              const eligibleProducts = BRAND_NAME_PRODUCTS.filter((p) => Math.round(p.confidence * 100) >= 60)
-              const allConfirmed = eligibleProducts.length > 0 && eligibleProducts.every((p) => {
-                const s = productStates[`${group.attributeName}|${p.product}`] || "pending"
+              // Row is fully confirmed when all above-threshold GTINs are confirmed/batch-selected
+              const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence * 100) >= 60)
+              const allConfirmed = eligibleGtins.length > 0 && eligibleGtins.every((g) => {
+                const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
                 return s === "confirmed" || s === "batch-selected"
               })
 
