@@ -1242,20 +1242,20 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                         <td className="px-3 py-2 text-[11px] font-semibold text-[#374151] uppercase tracking-wide text-center">Actions</td>
                       </tr>
                       
-                      {/* Product rows from mock data - filtered when Low Confidence toggle is active */}
-                      {BRAND_NAME_PRODUCTS
-                        .filter((product) => {
-                          // When low confidence filter is active, only show products with confidence < 90%
+                      {/* Product rows from per-attribute GTINs - filtered when Low Confidence toggle is active */}
+                      {group.gtins
+                        .filter((gtin) => {
+                          // When low confidence filter is active, only show GTINs with confidence < 90%
                           if (!showLowConfidenceOnly) return true
-                          return Math.round(product.confidence * 100) < 90
+                          return gtin.confidence < 0.90
                         })
-                        .map((product) => {
-                        const confidencePercent = Math.round(product.confidence * 100)
+                        .map((gtin) => {
+                        const confidencePercent = Math.round(gtin.confidence * 100)
                         const isBelowThreshold = confidencePercent < 60
-                        const isProductGtinsExpanded = expandedProductGtins.has(product.product)
-                        const productKey = `${group.attributeName}|${product.product}`
+                        const isProductGtinsExpanded = expandedProductGtins.has(gtin.productDescription)
+                        const productKey = `${group.attributeName}|${gtin.productDescription}`
                         const productState = productStates[productKey] || "pending"
-                        const isEditing = editingProduct?.attribute === group.attributeName && editingProduct?.product === product.product
+                        const isEditing = editingProduct?.attribute === group.attributeName && editingProduct?.product === gtin.productDescription
                         const isConfirmed = productState === "confirmed"
                         const isBatchSelected = productState === "batch-selected"
                         const isRejected = productState === "rejected"
@@ -1264,7 +1264,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                           <>
                             {/* Product row */}
                             <tr
-                              key={`${group.attributeName}-${product.product}`}
+                              key={`${group.attributeName}-${gtin.gtin}`}
                               className={`border-b ${
                                 isConfirmed
                                   ? "border-[#bbf7d0] bg-[#f0fdf4]"
@@ -1280,9 +1280,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                               <td className="px-3 py-2.5"></td>
                               <td className="px-3 py-2.5">
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="text-[12px] text-[#1a1f2e] font-medium">{product.product}</span>
+                                  <span className="text-[12px] text-[#1a1f2e] font-medium">{gtin.productDescription}</span>
                                   <button
-                                    onClick={() => toggleProductGtins(product.product)}
+                                    onClick={() => toggleProductGtins(gtin.productDescription)}
                                     className="text-[10px] text-[#6b7280] hover:text-[#1a5fa6] hover:underline text-left w-fit"
                                   >
                                     {isProductGtinsExpanded ? "Hide GTINs" : "View GTINs"}
@@ -1297,7 +1297,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                       attributeName={group.attributeName}
                                       value={editProductValue}
                                       onChange={setEditProductValue}
-                                      onSave={() => saveProductEdit(group.attributeName, product.product)}
+                                      onSave={() => saveProductEdit(group.attributeName, gtin.productDescription)}
                                       onCancel={cancelProductEdit}
                                     />
                                   </div>
@@ -1305,9 +1305,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                                   <span className="text-[12px] font-semibold text-[#9ca3af] italic">N/A</span>
                                 ) : (
                                   <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[12px] font-semibold text-[#1a1f2e]">{product.suggestedValue}</span>
-                                    {product.source && (
-                                      <span className="text-[10px] text-[#6b7280] italic">{product.source}</span>
+                                    <span className="text-[12px] font-semibold text-[#1a1f2e]">{gtin.aiSuggestion}</span>
+                                    {gtin.aiReasoning && (
+                                      <span className="text-[10px] text-[#6b7280] italic">{gtin.aiReasoning}</span>
                                     )}
                                   </div>
                                 )}
