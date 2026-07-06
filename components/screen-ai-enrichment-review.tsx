@@ -1353,7 +1353,12 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                               </td>
                               <td className="px-3 py-2.5 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
-                                  {isConfirmed ? (
+                                  {isConfirmed && completedAt && allConfirmed ? (
+                                    // Attribute was fully enriched and session completed — lock this product row
+                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
+                                      <Check className="w-3.5 h-3.5" /> Completed
+                                    </span>
+                                  ) : isConfirmed ? (
                                     <>
                                       <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
                                         <Check className="w-3.5 h-3.5" /> Confirmed
