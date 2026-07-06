@@ -883,38 +883,17 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             <thead>
               <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
                 <th className="text-left px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Attribute</th>
-                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Total</th>
-                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Confirmed</th>
-                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Pending</th>
-                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Rejected</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Products Enriched</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Avg Confidence</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Status</th>
               </tr>
             </thead>
             <tbody>
               {attributeSummaryRows.map((row, i) => (
                 <tr key={row.name} className={`border-b border-[#f3f4f6] ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
                   <td className="px-4 py-2.5 font-medium text-[#1a1f2e]">{row.name}</td>
-                  <td className="px-4 py-2.5 text-center text-[#6b7280]">{row.total}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
-                      <Check className="w-3 h-3" />{row.confirmed}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    {row.pending > 0 ? (
-                      <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fef3c7] text-[#92400e]">{row.pending}</span>
-                    ) : (
-                      <span className="text-[#9ca3af] text-[11px]">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    {row.rejected > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fee2e2] text-[#991b1b]">
-                        <X className="w-3 h-3" />{row.rejected}
-                      </span>
-                    ) : (
-                      <span className="text-[#9ca3af] text-[11px]">—</span>
-                    )}
+                  <td className="px-4 py-2.5 text-center font-mono text-[#1a5fa6] font-semibold">
+                    {row.confirmed}/{row.total}
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
@@ -926,6 +905,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                       </div>
                       <span className="text-[12px] text-[#374151]">{row.avgConf}%</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
+                      <Check className="w-3 h-3" /> Completed
+                    </span>
                   </td>
                 </tr>
               ))}
