@@ -1229,15 +1229,17 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                           <div className="flex items-center gap-2">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded bg-[#dcfce7] text-[#166534]">
                               <Check className="w-3.5 h-3.5" />
-                              Confirmed
+                              {completedAt ? "Completed" : "Confirmed"}
                             </span>
-                            <button
-                              onClick={() => undoAllForAttribute(group.attributeName)}
-                              className="px-2 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors whitespace-nowrap"
-                              title="Undo all confirmations for this attribute"
-                            >
-                              Undo
-                            </button>
+                            {!completedAt && (
+                              <button
+                                onClick={() => undoAllForAttribute(group.attributeName)}
+                                className="px-2 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors whitespace-nowrap"
+                                title="Undo all confirmations for this attribute"
+                              >
+                                Undo
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <button
