@@ -214,12 +214,22 @@ function AttributeValueCombobox({
   )
 }
 
+export interface EnrichmentSummaryData {
+  codes: string[]
+  description: string
+  totalProducts: number
+  attributeGroups: AttributeGroup[]
+  productStates: Record<string, string>
+  confirmedPercentage: number
+  completedAt: string
+}
+
 interface ScreenAIEnrichmentReviewProps {
   selectedCodes: string[]
   codesMetadata: Record<string, { gtins: number; products?: number; description: string }>
   onBack: () => void
-  onComplete: (confirmedPercentage: number, codes: string[]) => void
-  }
+  onComplete: (summaryData: EnrichmentSummaryData, codes: string[]) => void
+}
 
 // Change 1: Renamed to ProductAttribute (was GTINAttribute) to reflect product-level grouping
 // Change 4: Added "batch-selected" status for threshold toggles
@@ -740,15 +750,28 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
 
   const handleConfirmComplete = () => {
     // Convert all batch-selected product states to confirmed on save
-    setProductStates((prev) => {
-      const next = { ...prev }
-      Object.keys(next).forEach((key) => {
-        if (next[key] === "batch-selected") next[key] = "confirmed"
-      })
-      return next
+    const finalStates = { ...productStates }
+    Object.keys(finalStates).forEach((key) => {
+      if (finalStates[key] === "batch-selected") finalStates[key] = "confirmed"
     })
+    setProductStates(finalStates)
     setShowConfirmDialog(false)
-    onComplete(enrichedGtinPercent, [code])
+    const today = new Date().toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    })
+    onComplete(
+      {
+        codes: [code],
+        description: metadata.description,
+        totalProducts,
+        attributeGroups,
+        productStates: finalStates,
+        confirmedPercentage,
+        completedAt: today,
+      },
+      [code]
+    )
   }
 
   const handleCancelComplete = () => {

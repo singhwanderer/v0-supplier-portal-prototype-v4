@@ -12,7 +12,9 @@ import { ScreenEnrichmentPreview } from "@/components/screen-enrichment-preview"
 import { ScreenSelectionCode } from "@/components/screen-selection-code"
 import { ScreenSelectionCodeList } from "@/components/screen-selection-code-list"
 import { ScreenAIEnrichmentReview } from "@/components/screen-ai-enrichment-review"
+import { ScreenEnrichmentSummary } from "@/components/screen-enrichment-summary"
 import { ScreenCategoryFallback } from "@/components/screen-category-fallback"
+import type { EnrichmentSummaryData } from "@/components/screen-ai-enrichment-review"
 import { ScreenIndividualAssignment } from "@/components/screen-individual-assignment"
 
 export interface ConfirmedCategory {
@@ -24,7 +26,7 @@ export interface ConfirmedCategory {
 }
 
 type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment"
-type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment"
+type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "enrichment-summary" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment"
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("upload")
@@ -38,6 +40,7 @@ export default function Home() {
   const [selectedSelectionCodes, setSelectedSelectionCodes] = useState<string[]>([])
   const [selectedCodesMetadata, setSelectedCodesMetadata] = useState<Record<string, { gtins: number; products: number; description: string }>>({})
   const [enrichmentUpdates, setEnrichmentUpdates] = useState<Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }>>({})
+  const [enrichmentSummaryData, setEnrichmentSummaryData] = useState<EnrichmentSummaryData | null>(null)
   // Tracks which entry point took the user into Brick Confirmation so we can adapt copy and routing
   const [brickConfirmationSource, setBrickConfirmationSource] = useState<"upload" | "selection-code">("upload")
   // Bug 3 fix: Track individual assignment scope
@@ -104,21 +107,31 @@ export default function Home() {
           selectedCodes={selectedSelectionCodes}
           codesMetadata={selectedCodesMetadata}
           onBack={() => setScreen("selection-code-list")}
-          onComplete={(enrichedGtinPercent, codes) => {
-            // Map GTIN enrichment coverage to a three-tier status.
+          onComplete={(summaryData, codes) => {
+            // Map confirmed percentage to a three-tier status.
             //   ≥ 50%  → AI Enriched
-            //   > 0%   → In Progress (user did partial work; flag it, don't bury it)
-            //   0%     → Needs Enrichment (no change, but shouldn't normally reach here because Complete is disabled)
+            //   > 0%   → In Progress
+            //   0%     → Needs Enrichment
             const nextStatus: EnrichmentStatus =
-              enrichedGtinPercent >= 50 ? "ai-enriched" : enrichedGtinPercent > 0 ? "in-progress" : "needs-enrichment"
+              summaryData.confirmedPercentage >= 50 ? "ai-enriched"
+              : summaryData.confirmedPercentage > 0 ? "in-progress"
+              : "needs-enrichment"
             const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
             const newUpdates: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }> = { ...enrichmentUpdates }
             codes.forEach((code) => {
               newUpdates[code] = { status: nextStatus, lastEnrichedDate: today }
             })
             setEnrichmentUpdates(newUpdates)
-            setScreen("selection-code-list")
+            setEnrichmentSummaryData(summaryData)
+            setScreen("enrichment-summary")
           }}
+        />
+      )}
+
+      {screen === "enrichment-summary" && enrichmentSummaryData && (
+        <ScreenEnrichmentSummary
+          summaryData={enrichmentSummaryData}
+          onBackToList={() => setScreen("selection-code-list")}
         />
       )}
 
