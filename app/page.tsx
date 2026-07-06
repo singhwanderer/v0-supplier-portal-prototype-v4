@@ -104,20 +104,22 @@ export default function Home() {
           selectedCodes={selectedSelectionCodes}
           codesMetadata={selectedCodesMetadata}
           onBack={() => setScreen("selection-code-list")}
-          onComplete={(enrichedGtinPercent, codes) => {
-            // Map GTIN enrichment coverage to a three-tier status.
+          onComplete={(confirmedPercentage, codes) => {
+            // Map confirmed percentage to a three-tier status.
             //   ≥ 50%  → AI Enriched
-            //   > 0%   → In Progress (user did partial work; flag it, don't bury it)
-            //   0%     → Needs Enrichment (no change, but shouldn't normally reach here because Complete is disabled)
+            //   > 0%   → In Progress
+            //   0%     → Needs Enrichment
             const nextStatus: EnrichmentStatus =
-              enrichedGtinPercent >= 50 ? "ai-enriched" : enrichedGtinPercent > 0 ? "in-progress" : "needs-enrichment"
+              confirmedPercentage >= 50 ? "ai-enriched"
+              : confirmedPercentage > 0 ? "in-progress"
+              : "needs-enrichment"
             const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
             const newUpdates: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }> = { ...enrichmentUpdates }
             codes.forEach((code) => {
               newUpdates[code] = { status: nextStatus, lastEnrichedDate: today }
             })
             setEnrichmentUpdates(newUpdates)
-            setScreen("selection-code-list")
+            // Stay on the review screen — the completed summary view renders inline
           }}
         />
       )}
