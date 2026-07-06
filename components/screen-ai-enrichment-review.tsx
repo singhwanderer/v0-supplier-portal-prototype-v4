@@ -214,21 +214,11 @@ function AttributeValueCombobox({
   )
 }
 
-export interface EnrichmentSummaryData {
-  codes: string[]
-  description: string
-  totalProducts: number
-  attributeGroups: AttributeGroup[]
-  productStates: Record<string, string>
-  confirmedPercentage: number
-  completedAt: string
-}
-
 interface ScreenAIEnrichmentReviewProps {
   selectedCodes: string[]
   codesMetadata: Record<string, { gtins: number; products?: number; description: string }>
   onBack: () => void
-  onComplete: (summaryData: EnrichmentSummaryData, codes: string[]) => void
+  onComplete: (confirmedPercentage: number, codes: string[]) => void
 }
 
 // Change 1: Renamed to ProductAttribute (was GTINAttribute) to reflect product-level grouping
@@ -748,6 +738,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     setShowConfirmDialog(true)
   }
 
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [completedAt, setCompletedAt] = useState("")
+
   const handleConfirmComplete = () => {
     // Convert all batch-selected product states to confirmed on save
     const finalStates = { ...productStates }
@@ -756,22 +749,18 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
     })
     setProductStates(finalStates)
     setShowConfirmDialog(false)
-    const today = new Date().toLocaleString("en-US", {
+    const now = new Date().toLocaleString("en-US", {
       month: "short", day: "numeric", year: "numeric",
       hour: "2-digit", minute: "2-digit",
     })
-    onComplete(
-      {
-        codes: [code],
-        description: metadata.description,
-        totalProducts,
-        attributeGroups,
-        productStates: finalStates,
-        confirmedPercentage,
-        completedAt: today,
-      },
-      [code]
-    )
+    setCompletedAt(now)
+    setIsCompleted(true)
+    // Notify parent so selection-code-list status updates, but don't navigate away
+    onComplete(confirmedPercentage, [code])
+  }
+
+  const handleContinueEnrichment = () => {
+    setIsCompleted(false)
   }
 
   const handleCancelComplete = () => {
@@ -809,6 +798,162 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
       const el = document.getElementById(`attr-row-${attrName.replace(/\s+/g, "-").toLowerCase()}`)
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
     }, 50)
+  }
+
+  // ── Per-attribute summary stats (used in completed view) ─────────────────
+  const attributeSummaryRows = attributeGroups.map((group) => {
+    const confirmed = group.gtins.filter((g) => {
+      const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
+      return s === "confirmed" || s === "batch-selected"
+    }).length
+    const rejected = group.gtins.filter((g) => {
+      const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
+      return s === "rejected"
+    }).length
+    const pending = group.gtins.length - confirmed - rejected
+    const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+    const avgConf = attrDef ? Math.round(attrDef.avgConfidence * 100) : Math.round(
+      group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length
+    )
+    return { name: group.attributeName, total: group.gtins.length, confirmed, rejected, pending, avgConf }
+  })
+
+  if (isCompleted) {
+    const totalConfirmed = attributeSummaryRows.reduce((s, r) => s + r.confirmed, 0)
+    const totalPending   = attributeSummaryRows.reduce((s, r) => s + r.pending,   0)
+    const totalRejected  = attributeSummaryRows.reduce((s, r) => s + r.rejected,  0)
+    const hasPending     = totalPending > 0
+
+    return (
+      <div className="space-y-6 pb-10">
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-[#2e7d32]" />
+              <h2 className="text-[16px] font-semibold text-[#1a1f2e]">Enrichment Completed</h2>
+            </div>
+            <p className="text-[13px] text-[#6b7280] mt-1">
+              Selection Code: <span className="font-mono text-[#1a5fa6] font-semibold">{code}</span> — {metadata.description} &middot; {completedAt}
+            </p>
+          </div>
+          <button
+            onClick={onBack}
+            className="px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+          >
+            &larr; Back to List
+          </button>
+        </div>
+
+        {/* ── Pending banner ── */}
+        {hasPending && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded border border-[#fed7aa] bg-[#fef5e7]">
+            <AlertTriangle className="w-4 h-4 text-[#d97706] shrink-0 mt-0.5" />
+            <p className="text-[13px] text-[#b45309]">
+              <span className="font-semibold">{totalPending} suggestions</span> are still pending across {attributeSummaryRows.filter((r) => r.pending > 0).length} attribute{attributeSummaryRows.filter((r) => r.pending > 0).length !== 1 ? "s" : ""}. Continue enrichment to action them.
+            </p>
+          </div>
+        )}
+
+        {/* ── Summary chips ── */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white border border-[#d1d5db] rounded p-4">
+            <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Total Products</p>
+            <p className="text-[24px] font-bold text-[#1a1f2e] mt-1">{totalProducts}</p>
+          </div>
+          <div className="bg-white border border-[#d1d5db] rounded p-4">
+            <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Suggestions Confirmed</p>
+            <p className="text-[24px] font-bold text-[#2e7d32] mt-1">{totalConfirmed}</p>
+            {totalPending > 0 && (
+              <p className="text-[11px] text-[#6b7280] mt-0.5">{totalPending} pending &middot; {totalRejected} rejected</p>
+            )}
+          </div>
+          <div className="bg-white border border-[#d1d5db] rounded p-4">
+            <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wide">Confirmed</p>
+            <p className="text-[24px] font-bold text-[#1a5fa6] mt-1">{confirmedPercentage}%</p>
+          </div>
+        </div>
+
+        {/* ── Per-attribute breakdown table ── */}
+        <div className="bg-white border border-[#d1d5db] rounded overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb]">
+            <h3 className="text-[13px] font-semibold text-[#374151]">Attribute Breakdown</h3>
+          </div>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+                <th className="text-left px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Attribute</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Total</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Confirmed</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Pending</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Rejected</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-[#6b7280] text-[11px] uppercase tracking-wide">Avg Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attributeSummaryRows.map((row, i) => (
+                <tr key={row.name} className={`border-b border-[#f3f4f6] ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
+                  <td className="px-4 py-2.5 font-medium text-[#1a1f2e]">{row.name}</td>
+                  <td className="px-4 py-2.5 text-center text-[#6b7280]">{row.total}</td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">
+                      <Check className="w-3 h-3" />{row.confirmed}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {row.pending > 0 ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fef3c7] text-[#92400e]">{row.pending}</span>
+                    ) : (
+                      <span className="text-[#9ca3af] text-[11px]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {row.rejected > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fee2e2] text-[#991b1b]">
+                        <X className="w-3 h-3" />{row.rejected}
+                      </span>
+                    ) : (
+                      <span className="text-[#9ca3af] text-[11px]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${row.avgConf >= 90 ? "bg-[#2e7d32]" : row.avgConf >= 80 ? "bg-[#d97706]" : "bg-[#dc2626]"}`}
+                          style={{ width: `${row.avgConf}%` }}
+                        />
+                      </div>
+                      <span className="text-[12px] text-[#374151]">{row.avgConf}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Action buttons ── */}
+        <div className="flex items-center justify-between pt-2">
+          <button
+            onClick={handleContinueEnrichment}
+            className={`px-4 py-2 text-[13px] font-semibold rounded transition-colors ${
+              hasPending
+                ? "bg-[#1a5fa6] text-white hover:bg-[#1a4f8c]"
+                : "border border-[#1a5fa6] text-[#1a5fa6] bg-white hover:bg-[#eff6ff]"
+            }`}
+          >
+            Continue Enrichment
+          </button>
+          <button
+            onClick={onBack}
+            className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:opacity-90 transition-opacity"
+          >
+            Back to Selection Codes
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
