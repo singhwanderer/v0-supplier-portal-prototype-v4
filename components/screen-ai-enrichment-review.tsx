@@ -1195,7 +1195,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
                           const avgIsLow = avgConfidence < 90
                           const showNeedsReview = !allConfirmed && (hasNoValue || valueIsLow || avgIsLow)
                           if (allConfirmed) {
-                            return <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">Confirmed</span>
+                            return <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#dcfce7] text-[#166534]">{completedAt ? "Completed" : "Confirmed"}</span>
                           }
                           if (showNeedsReview) {
                             return <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">Needs review</span>
