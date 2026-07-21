@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
 
-type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment"
+type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "categories-assigned"
 
 interface SelectionCodeRow {
   id: string
@@ -11,6 +11,7 @@ interface SelectionCodeRow {
   description: string
   products: number
   gtins: number
+  categoriesAssigned: number // how many products already have a category (manual or AI)
   createDate: string
   lastUpdateDate: string
   lastEnrichedDate: string // "TBD" if never enriched, otherwise date
@@ -18,27 +19,28 @@ interface SelectionCodeRow {
 }
 
 interface ScreenSelectionCodeListProps {
-onEnrichSelected: (codes: string[], metadata: Record<string, { gtins: number; products: number; description: string }>) => void
-  enrichmentUpdates?: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string }>
+  onEnrichSelected: (codes: string[], metadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }>) => void
+  onOpenProductList?: (code: string, metadata: { gtins: number; products: number; description: string; categoriesAssigned: number }) => void
+  enrichmentUpdates?: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string; categoriesAssigned?: number }>
   }
 
 const INITIAL_SELECTION_CODE_DATA: SelectionCodeRow[] = [
-  { id: "1", code: "001", description: "Footwear",             products: 52, gtins: 288, createDate: "08/10/2015", lastUpdateDate: "03/10/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
-  { id: "2", code: "002", description: "Sleepwear",            products: 58, gtins: 157, createDate: "06/20/2007", lastUpdateDate: "06/24/2025", lastEnrichedDate: "02/15/2026", status: "in-progress" },
-  { id: "3", code: "003", description: "Jewellery & Watches",  products: 44, gtins: 198, createDate: "07/22/2011", lastUpdateDate: "04/05/2025", lastEnrichedDate: "04/05/2025", status: "ai-enriched" },
+  { id: "1", code: "001", description: "Footwear",             products: 52, gtins: 288, categoriesAssigned: 0,  createDate: "08/10/2015", lastUpdateDate: "03/10/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
+  { id: "2", code: "002", description: "Sleepwear",            products: 52, gtins: 157, categoriesAssigned: 38, createDate: "06/20/2007", lastUpdateDate: "06/24/2025", lastEnrichedDate: "02/15/2026", status: "in-progress" },
+  { id: "3", code: "003", description: "Jewellery & Watches",  products: 44, gtins: 198, categoriesAssigned: 44, createDate: "07/22/2011", lastUpdateDate: "04/05/2025", lastEnrichedDate: "04/05/2025", status: "ai-enriched" },
 ]
 
 type SortKey = "code" | "description" | "products" | "gtins" | "createDate" | "lastUpdateDate" | "lastEnrichedDate"
 type SortDir = "asc" | "desc"
 
-export function ScreenSelectionCodeList({ onEnrichSelected, enrichmentUpdates }: ScreenSelectionCodeListProps) {
+export function ScreenSelectionCodeList({ onEnrichSelected, onOpenProductList, enrichmentUpdates }: ScreenSelectionCodeListProps) {
   const [data, setData] = useState<SelectionCodeRow[]>(INITIAL_SELECTION_CODE_DATA)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<SortKey>("code")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 25
-  const totalRecords = 3
+  const totalRecords = data.length
 
   // Apply enrichment updates when they change
   useEffect(() => {
@@ -47,7 +49,12 @@ export function ScreenSelectionCodeList({ onEnrichSelected, enrichmentUpdates }:
         prev.map((row) => {
           const update = enrichmentUpdates[row.code]
           if (update) {
-            return { ...row, status: update.status, lastEnrichedDate: update.lastEnrichedDate }
+            return {
+              ...row,
+              status: update.status,
+              lastEnrichedDate: update.lastEnrichedDate,
+              categoriesAssigned: update.categoriesAssigned ?? row.categoriesAssigned,
+            }
           }
           return row
         })
@@ -105,12 +112,23 @@ export function ScreenSelectionCodeList({ onEnrichSelected, enrichmentUpdates }:
 const handleEnrichSelected = () => {
   const selectedData = sortedData.filter((r) => selectedRows.has(r.id))
   const selectedCodes = selectedData.map((r) => r.code)
-  const metadata: Record<string, { gtins: number; products: number; description: string }> = {}
+  const metadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }> = {}
   selectedData.forEach((r) => {
-    metadata[r.code] = { gtins: r.gtins, products: r.products, description: r.description }
+    metadata[r.code] = { gtins: r.gtins, products: r.products, description: r.description, categoriesAssigned: r.categoriesAssigned }
   })
   onEnrichSelected(selectedCodes, metadata)
   }
+
+  // Expectation-setting copy under the Enrich CTA — tells the user exactly what
+  // clicking Enrich will do for the currently selected row (no black box).
+  const selectedRow = sortedData.find((r) => selectedRows.has(r.id))
+  const enrichHelperText = !selectedRow
+    ? "Select a selection code to see what AI enrichment will do."
+    : selectedRow.categoriesAssigned >= selectedRow.products
+      ? `Next: all ${selectedRow.products} products have categories — AI will suggest attribute values for your review. Nothing is submitted without your confirmation.`
+      : selectedRow.categoriesAssigned === 0
+        ? `Next: AI will group these ${selectedRow.products} products into categories for your confirmation, then suggest attribute values for review.`
+        : `Next: ${selectedRow.categoriesAssigned} of ${selectedRow.products} products already have categories — you'll assign the remaining ${selectedRow.products - selectedRow.categoriesAssigned} with AI before attribute enrichment.`
 
   const SortIcon = ({ column }: { column: SortKey }) => (
     <span className="inline-flex flex-col ml-1">
@@ -144,34 +162,39 @@ const handleEnrichSelected = () => {
       </div>
 
       {/* Action bar */}
-      <div className="flex items-center justify-between bg-white border border-[#d1d5db] rounded px-4 py-2">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleClearFilter}
-            className="text-[12px] text-[#1a5fa6] hover:underline focus:outline-none"
-          >
-            Clear Filter
-          </button>
-          {selectedRows.size > 0 && (
+      <div className="bg-white border border-[#d1d5db] rounded px-4 py-2 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleClearFilter}
+              className="text-[12px] text-[#1a5fa6] hover:underline focus:outline-none"
+            >
+              Clear Filter
+            </button>
+            {selectedRows.size > 0 && (
+              <span className="text-[12px] text-[#6b7280]">
+                {selectedRows.size} selected
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleEnrichSelected}
+              disabled={selectedRows.size === 0}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] font-semibold text-white rounded transition-opacity disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              style={{ backgroundColor: "#1a5fa6" }}
+            >
+              <Sparkles className="w-4 h-4" />
+              Enrich Selection Code with AI
+            </button>
             <span className="text-[12px] text-[#6b7280]">
-              {selectedRows.size} selected
+              {startRecord}-{endRecord} of {totalRecords} records
             </span>
-          )}
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleEnrichSelected}
-            disabled={selectedRows.size === 0}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] font-semibold text-white rounded transition-opacity disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-            style={{ backgroundColor: "#1a5fa6" }}
-          >
-            <Sparkles className="w-4 h-4" />
-            Enrich Selection Code with AI
-          </button>
-          <span className="text-[12px] text-[#6b7280]">
-            {startRecord}-{endRecord} of {totalRecords} records
-          </span>
-        </div>
+        <p className="text-[12px] text-[#6b7280] text-right" role="status">
+          {enrichHelperText}
+        </p>
       </div>
 
       {/* Table */}
@@ -219,6 +242,7 @@ const handleEnrichSelected = () => {
                     <SortIcon column="gtins" />
                   </button>
                 </th>
+                <th className="px-3 py-2 text-left font-semibold text-[#374151]">Categories</th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">
                   <button
                     onClick={() => handleSort("createDate")}
@@ -265,10 +289,33 @@ const handleEnrichSelected = () => {
                       className="w-4 h-4 rounded border-[#d1d5db] text-[#1a5fa6] focus:ring-[#1a5fa6]"
                     />
                   </td>
-                  <td className="px-3 py-2 font-mono text-[#1a5fa6]">{row.code}</td>
+                  <td className="px-3 py-2 font-mono">
+                    <button
+                      onClick={() => onOpenProductList?.(row.code, { gtins: row.gtins, products: row.products, description: row.description, categoriesAssigned: row.categoriesAssigned })}
+                      className="text-[#1a5fa6] hover:underline focus:outline-none"
+                      title={`View products in Selection Code ${row.code}`}
+                    >
+                      {row.code}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 text-[#374151]">{row.description}</td>
                   <td className="px-3 py-2 text-right text-[#374151]">{row.products}</td>
                   <td className="px-3 py-2 text-right text-[#374151]">{row.gtins}</td>
+                  <td className="px-3 py-2">
+                    {row.categoriesAssigned >= row.products ? (
+                      <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#dcfce7] text-[#166534]">
+                        All assigned ({row.categoriesAssigned}/{row.products})
+                      </span>
+                    ) : row.categoriesAssigned > 0 ? (
+                      <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#fef3c7] text-[#92400e]">
+                        {row.categoriesAssigned}/{row.products} assigned
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
+                        0/{row.products} assigned
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-[#6b7280]">{row.createDate}</td>
                   <td className="px-3 py-2 text-[#6b7280]">{row.lastUpdateDate}</td>
                   <td className="px-3 py-2">
@@ -294,6 +341,12 @@ const handleEnrichSelected = () => {
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#9ca3af]" />
                         Needs Enrichment
+                      </span>
+                    )}
+                    {row.status === "categories-assigned" && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded bg-[#dbeafe] text-[#1e40af]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />
+                        Categories Assigned – Not Enriched
                       </span>
                     )}
                   </td>

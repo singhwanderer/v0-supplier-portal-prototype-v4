@@ -9,16 +9,18 @@ interface AppShellProps {
   children: ReactNode
   onHome: () => void
   onSelectionCodeList?: () => void
+  onTextFileUpload?: () => void
   activeScreen?: "upload" | "summary" | "review" | "submission" | "selection-code-list"
 }
 
-export function AppShell({ children, onHome, onSelectionCodeList, activeScreen = "upload" }: AppShellProps) {
+export function AppShell({ children, onHome, onSelectionCodeList, onTextFileUpload, activeScreen = "upload" }: AppShellProps) {
   const isHome = activeScreen === "upload"
   const isSelectionCodeList = activeScreen === "selection-code-list"
 
-  // Discreet setting: hide the Text File Upload entry in the nav.
+  // Discreet setting: the Text File Upload nav entry is hidden by default —
+  // Selection Code List is the recommended entry point. The gear menu reveals it.
   // Persists within the session so the choice survives navigation.
-  const [showTextFileUpload, setShowTextFileUpload] = useState<boolean>(true)
+  const [showTextFileUpload, setShowTextFileUpload] = useState<boolean>(false)
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
   const settingsRef = useRef<HTMLDivElement>(null)
 
@@ -71,8 +73,8 @@ export function AppShell({ children, onHome, onSelectionCodeList, activeScreen =
             <button
               onClick={onHome}
               className="flex items-center justify-center w-7 h-7 border border-[#b0b8c4] rounded bg-white hover:bg-[#dde2e9] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-              aria-label="Return to Text File Upload"
-              title="Return to Text File Upload"
+              aria-label="Back to Home"
+              title="Back to Home"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                 <path d="M9 3L5 7L9 11" stroke="#1a5fa6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -82,7 +84,7 @@ export function AppShell({ children, onHome, onSelectionCodeList, activeScreen =
             <button
               onClick={onHome}
               className="flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium border border-[#b0b8c4] rounded bg-white text-[#1a5fa6] hover:bg-[#dde2e9] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-              aria-label="Home — return to Text File Upload"
+              aria-label="Home"
             >
               <Home className="w-3.5 h-3.5" aria-hidden="true" />
               Home
@@ -148,7 +150,7 @@ export function AppShell({ children, onHome, onSelectionCodeList, activeScreen =
             {showTextFileUpload && (
               <a
                 href="#"
-                onClick={(e) => { e.preventDefault(); onHome() }}
+                onClick={(e) => { e.preventDefault(); (onTextFileUpload ?? onHome)() }}
                 className={`block px-4 py-1.5 text-[13px] ${
                   isHome
                     ? "text-[#1a5fa6] font-semibold bg-[#e5edf7] border-l-2 border-[#1a5fa6]"

@@ -25,10 +25,13 @@ interface ScreenBrickConfirmationProps {
   totalGtinCount: number
   totalProductCount: number
   sourceContext?: BrickConfirmationSource
+  // When entered from the Category Coverage screen, only the unassigned subset is in scope
+  coverageScope?: "all" | "unassigned-only"
   onViewGtins: (categoryId: string, categoryName: string, brickCode: string) => void
   onProceedToEnrichment: (categories: ConfirmedCategory[]) => void
   onBack: () => void
-  onSkipToSelectionCodeList: () => void
+  // Scenario 3: persist confirmed categories and return to the Selection Code List
+  onSaveAndExit: (categories: ConfirmedCategory[]) => void
   // Bug 3 fix: Handler for individual product assignment view
   onAssignIndividually?: (scope: "unclassified" | "all-low-confidence", productCount: number) => void
 }
@@ -61,7 +64,7 @@ const SAMPLE_UNCERTAIN_PRODUCTS: UncertainProduct[] = [
   { id: "prod8", description: "Pearl drop earring set",             gtinCount: 1 },
 ]
 
-export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, onViewGtins, onProceedToEnrichment, onBack, onSkipToSelectionCodeList, onAssignIndividually }: ScreenBrickConfirmationProps) {
+export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProductCount, sourceContext, coverageScope = "all", onViewGtins, onProceedToEnrichment, onBack, onSaveAndExit, onAssignIndividually }: ScreenBrickConfirmationProps) {
   // Merge high-confidence and low-confidence categories into a single list
   const [categories, setCategories] = useState<BrickCategory[]>([...INITIAL_CATEGORIES, ...LOW_CONFIDENCE_CATEGORIES])
   // Track whether "Confirm All" batch action was used (enables batch undo)
@@ -172,7 +175,9 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
         >
           <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>
-            Enriching Selection Code <strong>{selectionCodeLabel}</strong> &middot; {totalProductCount.toLocaleString()} Products ({totalGtinCount.toLocaleString()} GTINs)
+            {coverageScope === "unassigned-only"
+              ? <>Assigning categories for the <strong>{totalProductCount.toLocaleString()} unassigned products</strong> in Selection Code <strong>{selectionCodeLabel}</strong> ({totalGtinCount.toLocaleString()} GTINs)</>
+              : <>Enriching Selection Code <strong>{selectionCodeLabel}</strong> &middot; {totalProductCount.toLocaleString()} Products ({totalGtinCount.toLocaleString()} GTINs)</>}
           </span>
         </div>
       ) : (
@@ -192,9 +197,11 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-[16px] font-semibold text-[#1a1f2e]">
-            {fromSelectionCode
-              ? `Review product categories for ${selectionCodeLabel}`
-              : `Review product categories for your ${totalProductCount.toLocaleString()} Products`}
+            {coverageScope === "unassigned-only" && fromSelectionCode
+              ? `Assign categories for ${totalProductCount.toLocaleString()} unassigned products`
+              : fromSelectionCode
+                ? `Review product categories for ${selectionCodeLabel}`
+                : `Review product categories for your ${totalProductCount.toLocaleString()} Products`}
           </h2>
           <p className="text-[13px] text-[#6b7280] mt-1 max-w-2xl">
             We read your product descriptions and grouped them into categories. Review each group, then continue to attribute enrichment.
@@ -471,14 +478,26 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
           >
             &#8592; Previous
           </button>
-          {!fromSelectionCode && (
+          {/* Scenario 3: exit without enriching — confirmed categories are saved, not discarded */}
+          <div>
             <button
-              onClick={onSkipToSelectionCodeList}
-              className="px-3 py-1.5 text-[13px] font-medium text-[#6b7280] hover:text-[#374151] hover:underline transition-colors focus:outline-none"
+              onClick={() =>
+                onSaveAndExit(
+                  confirmedList.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, gtinCount: c.gtinCount, confidence: c.confidence }))
+                )
+              }
+              className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             >
-              Skip Enrichment → Go to Selection Code List
+              {confirmedCount > 0 ? "Save & Return to List" : "Exit to Selection Code List"}
             </button>
-          )}
+            {confirmedCount > 0 && (
+              <p className="text-[11px] text-[#6b7280] mt-1 max-w-[260px]">
+                {fromSelectionCode
+                  ? "Confirmed categories are kept — this code will show “Categories Assigned – Not Enriched”."
+                  : "Confirmed categories are kept — you can enrich later from the Selection Code List."}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <p className="text-[12px] text-[#6b7280]">

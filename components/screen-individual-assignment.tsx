@@ -84,13 +84,17 @@ const CATEGORY_OPTIONS = [
 interface ScreenIndividualAssignmentProps {
   scope: "unclassified" | "all-low-confidence"
   onBack: () => void
+  // Scenario 3: save partial category assignments and return to the Selection Code List
+  onSaveAndExit?: (assignedCount: number, totalCount: number) => void
 }
 
-export function ScreenIndividualAssignment({ scope, onBack }: ScreenIndividualAssignmentProps) {
+export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: ScreenIndividualAssignmentProps) {
   // Get the correct product list based on scope
-  const initialProducts = scope === "unclassified" 
-    ? UNCLASSIFIED_PRODUCTS 
+  const initialProducts = scope === "unclassified"
+    ? UNCLASSIFIED_PRODUCTS
     : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
+
+  const backLabel = "Back to Quick Pick"
   
   const [products, setProducts] = useState<UnassignedProduct[]>(initialProducts)
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
@@ -147,7 +151,7 @@ export function ScreenIndividualAssignment({ scope, onBack }: ScreenIndividualAs
         <button
           onClick={onBack}
           className="flex items-center justify-center w-8 h-8 rounded border border-[#d1d5db] bg-white hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-          aria-label="Back to Quick Pick"
+          aria-label={backLabel}
         >
           <ArrowLeft className="w-4 h-4 text-[#374151]" aria-hidden="true" />
         </button>
@@ -190,7 +194,7 @@ export function ScreenIndividualAssignment({ scope, onBack }: ScreenIndividualAs
           className="ml-auto text-[12px] text-[#1a5fa6] font-medium hover:underline flex items-center gap-1"
         >
           <ArrowLeft className="w-3 h-3" />
-          Back to Quick Pick
+          {backLabel}
         </button>
       </div>
 
@@ -283,17 +287,36 @@ export function ScreenIndividualAssignment({ scope, onBack }: ScreenIndividualAs
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-[#e5e7eb]">
+      <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#e5e7eb] flex-wrap">
         <span className="text-[12px] text-[#6b7280]">
           {assignedCount} products assigned, {remainingCount} remaining
         </span>
-        <button
-          onClick={onBack}
-          disabled={remainingCount > 0}
-          className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
-        >
-          Done — Return to Quick Pick
-        </button>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Scenario 3: save partial work and exit — remaining products stay flagged */}
+          {onSaveAndExit && (
+            <div className="text-right">
+              <button
+                onClick={() => onSaveAndExit(assignedCount, products.length)}
+                disabled={assignedCount === 0}
+                className="px-4 py-2 text-[13px] font-semibold border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save & Return to List
+              </button>
+              {remainingCount > 0 && assignedCount > 0 && (
+                <p className="text-[11px] text-[#6b7280] mt-1">
+                  {remainingCount} products will stay flagged as needing a category.
+                </p>
+              )}
+            </div>
+          )}
+          <button
+            onClick={onBack}
+            disabled={remainingCount > 0}
+            className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
+          >
+            Done — Return to Quick Pick
+          </button>
+        </div>
       </div>
     </div>
   )
