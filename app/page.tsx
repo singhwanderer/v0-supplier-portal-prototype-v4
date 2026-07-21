@@ -37,7 +37,7 @@ type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "ca
 type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list"
 
 export default function Home() {
-  const [screen, setScreen] = useState<Screen>("upload")
+  const [screen, setScreen] = useState<Screen>("selection-code-list")
   const [uploadedFileName, setUploadedFileName] = useState<string>("")
   const [uploadedGtinCount, setUploadedGtinCount] = useState<number>(1024)
   const [confirmedCategories, setConfirmedCategories] = useState<ConfirmedCategory[]>([])
@@ -53,9 +53,7 @@ export default function Home() {
   // When entered from the Category Coverage screen, brick confirmation only covers the unassigned subset
   const [brickConfirmationScope, setBrickConfirmationScope] = useState<"all" | "unassigned-only">("all")
   // Bug 3 fix: Track individual assignment scope
-  const [individualAssignmentScope, setIndividualAssignmentScope] = useState<"unclassified" | "all-low-confidence" | "coverage-unassigned">("unclassified")
-  // Individual assignment now has two entry points, so track where "back" should land
-  const [individualAssignmentReturn, setIndividualAssignmentReturn] = useState<"brick-confirmation" | "category-coverage">("brick-confirmation")
+  const [individualAssignmentScope, setIndividualAssignmentScope] = useState<"unclassified" | "all-low-confidence">("unclassified")
   // Product-level drill-down state (Selection Code List → Product List → GTIN List)
   const [drillDownCode, setDrillDownCode] = useState<string>("")
   const [drillDownCodeMeta, setDrillDownCodeMeta] = useState<SelectionCodeMetadata | null>(null)
@@ -67,7 +65,9 @@ export default function Home() {
   const [enrichmentScopeLabel, setEnrichmentScopeLabel] = useState<string | null>(null)
 
   const goHome = () => {
-    setScreen("upload")
+    // Selection Code List is the recommended entry point; Text File Upload is
+    // hidden from the nav by default and reachable via the gear menu.
+    setScreen("selection-code-list")
     setConfirmedCategories([])
     setSelectedBrickCategoryId("")
     setSelectedBrickCategoryName("")
@@ -154,11 +154,18 @@ export default function Home() {
     )
     setBrickConfirmationSource("selection-code")
     setBrickConfirmationScope("all")
-    setScreen(allHaveCategories ? "ai-enrichment-review" : "category-coverage")
+    // Fully categorized selections go straight to review; anything uncategorized
+    // gets AI classification first (category assignment is AI-only).
+    setScreen(allHaveCategories ? "ai-enrichment-review" : "brick-confirmation")
   }
 
   return (
-    <AppShell onHome={goHome} onSelectionCodeList={() => setScreen("selection-code-list")} activeScreen={shellScreen}>
+    <AppShell
+      onHome={goHome}
+      onSelectionCodeList={() => setScreen("selection-code-list")}
+      onTextFileUpload={() => setScreen("upload")}
+      activeScreen={shellScreen}
+    >
       {screen === "upload" && (
         <Screen1Upload
           onEnrichmentComplete={(fileName, gtinCount) => {
@@ -181,9 +188,14 @@ export default function Home() {
             setBrickConfirmationScope("all")
             setEnrichmentProductScope(null)
             setEnrichmentScopeLabel(null)
-            // Route through the Category Coverage step first so the supplier sees exactly
-            // which products already have categories before any AI assignment happens.
-            setScreen("category-coverage")
+            // Codes with existing category assignments go through the Category Coverage
+            // view first; codes with none follow the original AI-classification flow.
+            const hasAssignments = codes.some((code) => {
+              const meta = metadata[code]
+              if (!meta) return false
+              return (enrichmentUpdates[code]?.categoriesAssigned ?? meta.categoriesAssigned) > 0
+            })
+            setScreen(hasAssignments ? "category-coverage" : "brick-confirmation")
           }}
           onOpenProductList={(code, metadata) => {
             setDrillDownCode(code)
@@ -201,11 +213,6 @@ export default function Home() {
           onAssignWithAI={() => {
             setBrickConfirmationScope("unassigned-only")
             setScreen("brick-confirmation")
-          }}
-          onAssignIndividually={() => {
-            setIndividualAssignmentScope("coverage-unassigned")
-            setIndividualAssignmentReturn("category-coverage")
-            setScreen("individual-assignment")
           }}
           onProceedToEnrichment={() => setScreen("ai-enrichment-review")}
           onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
@@ -362,7 +369,6 @@ export default function Home() {
           }}
           onAssignIndividually={(scope) => {
             setIndividualAssignmentScope(scope)
-            setIndividualAssignmentReturn("brick-confirmation")
             setScreen("individual-assignment")
           }}
         />
@@ -371,25 +377,7 @@ export default function Home() {
       {screen === "individual-assignment" && (
         <ScreenIndividualAssignment
           scope={individualAssignmentScope}
-          onBack={() => setScreen(individualAssignmentReturn)}
-          onDone={() => {
-            if (individualAssignmentReturn === "category-coverage") {
-              // "Done" only fires once every product is assigned — coverage is now complete
-              const next = { ...enrichmentUpdates }
-              selectedSelectionCodes.forEach((code) => {
-                const meta = selectedCodesMetadata[code]
-                if (!meta) return
-                const prev = enrichmentUpdates[code]
-                next[code] = {
-                  status: prev?.status === "ai-enriched" || prev?.status === "in-progress" ? prev.status : "categories-assigned",
-                  lastEnrichedDate: prev?.lastEnrichedDate ?? "TBD",
-                  categoriesAssigned: meta.products,
-                }
-              })
-              setEnrichmentUpdates(next)
-            }
-            setScreen(individualAssignmentReturn)
-          }}
+          onBack={() => setScreen("brick-confirmation")}
           onSaveAndExit={(assignedCount) => handleSaveCategoriesAndExit(assignedCount)}
         />
       )}

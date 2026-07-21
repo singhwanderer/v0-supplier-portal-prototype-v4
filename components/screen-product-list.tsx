@@ -23,22 +23,22 @@ interface ProductRow extends DrillDownProduct {
   status: ProductEnrichmentStatus
 }
 
-// Selection Code 001 (Footwear): coherent with the Category Coverage screen —
+// Selection Code 002 (Sleepwear): coherent with the Category Coverage screen —
 // 38 of 52 products have categories; the unassigned samples reappear here.
 const PRODUCTS_BY_CODE: Record<string, ProductRow[]> = {
-  "001": [
-    { id: "B11442", description: "Leather ankle boot set",            gtins: 6, category: { name: "Boots - General Purpose", brickCode: "10001076" },             createDate: "04/07/2021", lastUpdateDate: "03/10/2026", images: 3, status: "needs-enrichment" },
-    { id: "B11451", description: "Suede loafer, stacked heel",        gtins: 4, category: { name: "Shoes - General Purpose", brickCode: "10001077" },             createDate: "04/07/2021", lastUpdateDate: "01/22/2026", images: 1, status: "needs-enrichment" },
-    { id: "B11453", description: "Trail runner, waterproof",          gtins: 5, category: { name: "Athletic Footwear - General Purpose", brickCode: "10001070" }, createDate: "04/07/2021", lastUpdateDate: "01/22/2026", images: 1, status: "needs-enrichment" },
-    { id: "B11454", description: "Court sneaker, retro",              gtins: 6, category: { name: "Athletic Footwear - General Purpose", brickCode: "10001070" }, createDate: "04/07/2021", lastUpdateDate: "11/03/2025", images: 2, status: "needs-enrichment" },
-    { id: "B11455", description: "Chelsea boot, leather",             gtins: 4, category: { name: "Boots - General Purpose", brickCode: "10001076" },             createDate: "04/07/2021", lastUpdateDate: "11/03/2025", images: 0, status: "needs-enrichment" },
-    { id: "B11456", description: "Penny loafer, classic",             gtins: 3, category: { name: "Shoes - General Purpose", brickCode: "10001077" },             createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 0, status: "needs-enrichment" },
-    { id: "B11457", description: "Oxford dress shoe",                 gtins: 5, category: { name: "Shoes - General Purpose", brickCode: "10001077" },             createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 1, status: "needs-enrichment" },
-    { id: "B11462", description: "Hiking boot, insulated",            gtins: 6, category: { name: "Boots - General Purpose", brickCode: "10001076" },             createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 2, status: "needs-enrichment" },
-    { id: "B11477", description: "Cross-trainer, knit upper",         gtins: 5, category: { name: "Athletic Footwear - General Purpose", brickCode: "10001070" }, createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 1, status: "needs-enrichment" },
-    { id: "B11510", description: "Blue canvas sneaker collection",    gtins: 4, category: null,                                                                  createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
-    { id: "B11512", description: "Running shoe series, mesh upper",   gtins: 6, category: null,                                                                  createDate: "05/28/2026", lastUpdateDate: "",           images: 1, status: "needs-enrichment" },
-    { id: "B11515", description: "Casual lace-up walking shoe",       gtins: 3, category: null,                                                                  createDate: "05/28/2026", lastUpdateDate: "",           images: 0, status: "needs-enrichment" },
+  "002": [
+    { id: "S22011", description: "Cotton pajama set, long sleeve",   gtins: 6, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "04/07/2021", lastUpdateDate: "06/24/2025", images: 3, status: "needs-enrichment" },
+    { id: "S22014", description: "Plush fleece robe",                gtins: 4, category: { name: "Dressing Gowns", brickCode: "10001338" },        createDate: "04/07/2021", lastUpdateDate: "06/24/2025", images: 1, status: "needs-enrichment" },
+    { id: "S22017", description: "Modal sleep shirt",                gtins: 5, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "04/07/2021", lastUpdateDate: "03/12/2025", images: 1, status: "needs-enrichment" },
+    { id: "S22021", description: "Kimono wrap robe",                 gtins: 4, category: { name: "Dressing Gowns", brickCode: "10001338" },        createDate: "04/07/2021", lastUpdateDate: "03/12/2025", images: 2, status: "needs-enrichment" },
+    { id: "S22024", description: "Drawstring sleep pants",           gtins: 6, category: { name: "Sleep Trousers/Shorts", brickCode: "10001341" }, createDate: "04/07/2021", lastUpdateDate: "11/03/2025", images: 0, status: "needs-enrichment" },
+    { id: "S22027", description: "Knit sleep shorts, two-pack",      gtins: 3, category: { name: "Sleep Trousers/Shorts", brickCode: "10001341" }, createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 0, status: "needs-enrichment" },
+    { id: "S22031", description: "Lace-trim chemise",                gtins: 5, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 1, status: "needs-enrichment" },
+    { id: "S22034", description: "Hooded terry robe",                gtins: 4, category: { name: "Dressing Gowns", brickCode: "10001338" },        createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 2, status: "needs-enrichment" },
+    { id: "S22037", description: "Jogger-style lounge pants",        gtins: 5, category: { name: "Sleep Trousers/Shorts", brickCode: "10001341" }, createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 1, status: "needs-enrichment" },
+    { id: "S22041", description: "Silk nightgown collection",        gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
+    { id: "S22044", description: "Flannel pajama top",               gtins: 4, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 1, status: "needs-enrichment" },
+    { id: "S22047", description: "Satin camisole set",               gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 0, status: "needs-enrichment" },
   ],
 }
 

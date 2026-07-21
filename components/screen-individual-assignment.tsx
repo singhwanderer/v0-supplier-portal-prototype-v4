@@ -45,26 +45,6 @@ const LOW_CONFIDENCE_PRODUCTS: UnassignedProduct[] = [
   { id: "lc-b4", product: "Beaded stretch bracelet", gtins: 3, category: "Unassigned" },
 ]
 
-// Scenario 1: products without categories inside a selection code, reached via the
-// Category Coverage screen ("Assign individually"). Matches Selection Code 001's
-// 14 unassigned products (samples shown on the coverage screen).
-const COVERAGE_UNASSIGNED_PRODUCTS: UnassignedProduct[] = [
-  { id: "cov1",  product: "Blue canvas sneaker collection",  gtins: 4, category: "Unassigned" },
-  { id: "cov2",  product: "Running shoe series, mesh upper", gtins: 6, category: "Unassigned" },
-  { id: "cov3",  product: "Casual lace-up walking shoe",     gtins: 3, category: "Unassigned" },
-  { id: "cov4",  product: "Slip-on garden clog",             gtins: 2, category: "Unassigned" },
-  { id: "cov5",  product: "Platform espadrille",             gtins: 3, category: "Unassigned" },
-  { id: "cov6",  product: "Woven slide sandal",              gtins: 2, category: "Unassigned" },
-  { id: "cov7",  product: "Ankle-strap flat",                gtins: 1, category: "Unassigned" },
-  { id: "cov8",  product: "Studded mule",                    gtins: 2, category: "Unassigned" },
-  { id: "cov9",  product: "Suede chukka boot",               gtins: 3, category: "Unassigned" },
-  { id: "cov10", product: "Rain boot, glossy finish",        gtins: 2, category: "Unassigned" },
-  { id: "cov11", product: "Trail running shoe",              gtins: 4, category: "Unassigned" },
-  { id: "cov12", product: "Ballet flat, quilted",            gtins: 2, category: "Unassigned" },
-  { id: "cov13", product: "Wedge sandal, cork sole",         gtins: 3, category: "Unassigned" },
-  { id: "cov14", product: "House slipper, memory foam",      gtins: 2, category: "Unassigned" },
-]
-
 // Category options organized by parent
 const CATEGORY_OPTIONS = [
   {
@@ -102,23 +82,19 @@ const CATEGORY_OPTIONS = [
 ]
 
 interface ScreenIndividualAssignmentProps {
-  scope: "unclassified" | "all-low-confidence" | "coverage-unassigned"
+  scope: "unclassified" | "all-low-confidence"
   onBack: () => void
-  // Fired by "Done" — every product has been assigned (unlike onBack, which can fire anytime)
-  onDone?: (totalCount: number) => void
   // Scenario 3: save partial category assignments and return to the Selection Code List
   onSaveAndExit?: (assignedCount: number, totalCount: number) => void
 }
 
-export function ScreenIndividualAssignment({ scope, onBack, onDone, onSaveAndExit }: ScreenIndividualAssignmentProps) {
+export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: ScreenIndividualAssignmentProps) {
   // Get the correct product list based on scope
   const initialProducts = scope === "unclassified"
     ? UNCLASSIFIED_PRODUCTS
-    : scope === "coverage-unassigned"
-      ? COVERAGE_UNASSIGNED_PRODUCTS
-      : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
+    : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
 
-  const backLabel = scope === "coverage-unassigned" ? "Back to Category Coverage" : "Back to Quick Pick"
+  const backLabel = "Back to Quick Pick"
   
   const [products, setProducts] = useState<UnassignedProduct[]>(initialProducts)
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
@@ -334,11 +310,11 @@ export function ScreenIndividualAssignment({ scope, onBack, onDone, onSaveAndExi
             </div>
           )}
           <button
-            onClick={() => (onDone ? onDone(products.length) : onBack())}
+            onClick={onBack}
             disabled={remainingCount > 0}
             className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
           >
-            {scope === "coverage-unassigned" ? "Done — Back to Category Coverage" : "Done — Return to Quick Pick"}
+            Done — Return to Quick Pick
           </button>
         </div>
       </div>

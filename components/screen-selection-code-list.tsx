@@ -25,10 +25,9 @@ interface ScreenSelectionCodeListProps {
   }
 
 const INITIAL_SELECTION_CODE_DATA: SelectionCodeRow[] = [
-  { id: "1", code: "001", description: "Footwear",             products: 52, gtins: 288, categoriesAssigned: 38, createDate: "08/10/2015", lastUpdateDate: "03/10/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
-  { id: "2", code: "002", description: "Sleepwear",            products: 58, gtins: 157, categoriesAssigned: 58, createDate: "06/20/2007", lastUpdateDate: "06/24/2025", lastEnrichedDate: "02/15/2026", status: "in-progress" },
+  { id: "1", code: "001", description: "Footwear",             products: 52, gtins: 288, categoriesAssigned: 0,  createDate: "08/10/2015", lastUpdateDate: "03/10/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
+  { id: "2", code: "002", description: "Sleepwear",            products: 52, gtins: 157, categoriesAssigned: 38, createDate: "06/20/2007", lastUpdateDate: "06/24/2025", lastEnrichedDate: "02/15/2026", status: "in-progress" },
   { id: "3", code: "003", description: "Jewellery & Watches",  products: 44, gtins: 198, categoriesAssigned: 44, createDate: "07/22/2011", lastUpdateDate: "04/05/2025", lastEnrichedDate: "04/05/2025", status: "ai-enriched" },
-  { id: "4", code: "004", description: "Home & Giftware",      products: 36, gtins: 90,  categoriesAssigned: 0,  createDate: "03/14/2019", lastUpdateDate: "01/28/2026", lastEnrichedDate: "TBD",         status: "needs-enrichment" },
 ]
 
 type SortKey = "code" | "description" | "products" | "gtins" | "createDate" | "lastUpdateDate" | "lastEnrichedDate"
@@ -128,8 +127,8 @@ const handleEnrichSelected = () => {
     : selectedRow.categoriesAssigned >= selectedRow.products
       ? `Next: all ${selectedRow.products} products have categories — AI will suggest attribute values for your review. Nothing is submitted without your confirmation.`
       : selectedRow.categoriesAssigned === 0
-        ? `Next: none of these ${selectedRow.products} products have categories yet — you'll assign categories (with AI help or manually) before attribute enrichment.`
-        : `Next: review category coverage — ${selectedRow.categoriesAssigned} of ${selectedRow.products} products have categories; you'll assign the remaining ${selectedRow.products - selectedRow.categoriesAssigned} before AI enriches attributes.`
+        ? `Next: AI will group these ${selectedRow.products} products into categories for your confirmation, then suggest attribute values for review.`
+        : `Next: ${selectedRow.categoriesAssigned} of ${selectedRow.products} products already have categories — you'll assign the remaining ${selectedRow.products - selectedRow.categoriesAssigned} with AI before attribute enrichment.`
 
   const SortIcon = ({ column }: { column: SortKey }) => (
     <span className="inline-flex flex-col ml-1">

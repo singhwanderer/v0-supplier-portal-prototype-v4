@@ -24,12 +24,12 @@ interface GtinRow {
 }
 
 const GTINS_BY_PRODUCT: Record<string, GtinRow[]> = {
-  B11442: [
-    { gtin: "114415881201", gtinType: "UA", pack: "",   color: "105", colorDescription: "Chestnut",  size: "10006", sizeDescription: "Size 7",  publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "07/20/2026", discontinueDate: "", images: 1 },
-    { gtin: "214415881201", gtinType: "UA", pack: "",   color: "106", colorDescription: "Black",     size: "10006", sizeDescription: "Size 7",  publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
-    { gtin: "334415881201", gtinType: "UA", pack: "",   color: "505", colorDescription: "Tan",       size: "10009", sizeDescription: "Size 9",  publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
-    { gtin: "574211012895", gtinType: "UA", pack: "PP", color: "203", colorDescription: "Espresso",  size: "10005", sizeDescription: "Size 8",  publishedCost: "multiple", suggestedRetail: "multiple", createDate: "01/22/2026", lastUpdateDate: "03/24/2026", discontinueDate: "", images: 4 },
-    { gtin: "574211012904", gtinType: "UA", pack: "PP", color: "203", colorDescription: "Espresso",  size: "10015", sizeDescription: "Size 11", publishedCost: "multiple", suggestedRetail: "multiple", createDate: "03/10/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
+  S22011: [
+    { gtin: "114415881201", gtinType: "UA", pack: "",   color: "105", colorDescription: "Blush",     size: "10006", sizeDescription: "Small",  publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "07/20/2026", discontinueDate: "", images: 1 },
+    { gtin: "214415881201", gtinType: "UA", pack: "",   color: "106", colorDescription: "Navy",      size: "10006", sizeDescription: "Small",  publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
+    { gtin: "334415881201", gtinType: "UA", pack: "",   color: "505", colorDescription: "Ivory",     size: "10009", sizeDescription: "Medium", publishedCost: "",         suggestedRetail: "",         createDate: "05/28/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
+    { gtin: "574211012895", gtinType: "UA", pack: "PP", color: "203", colorDescription: "Heather",   size: "10005", sizeDescription: "Large",  publishedCost: "multiple", suggestedRetail: "multiple", createDate: "01/22/2026", lastUpdateDate: "03/24/2026", discontinueDate: "", images: 4 },
+    { gtin: "574211012904", gtinType: "UA", pack: "PP", color: "203", colorDescription: "Heather",   size: "10015", sizeDescription: "XLarge", publishedCost: "multiple", suggestedRetail: "multiple", createDate: "03/10/2026", lastUpdateDate: "",           discontinueDate: "", images: 1 },
   ],
 }
 
