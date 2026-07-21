@@ -217,6 +217,9 @@ function AttributeValueCombobox({
 interface ScreenAIEnrichmentReviewProps {
   selectedCodes: string[]
   codesMetadata: Record<string, { gtins: number; products?: number; description: string }>
+  // Scenario 2: when enrichment runs for specific products (not a whole selection code),
+  // this labels the scope in the header, e.g. "Product B11442 — Leather ankle boot set"
+  scopeLabel?: string
   onBack: () => void
   onComplete: (confirmedPercentage: number, codes: string[]) => void
 }
@@ -404,7 +407,7 @@ function generateAttributeData(code: string, gtinCount: number, description: str
   })
 }
 
-export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
+export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLabel, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Selection Code" }
   // Source of truth: use products count from previous screen (e.g., 125 for "Shoes - General Purpose")
@@ -834,6 +837,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
               <h2 className="text-[16px] font-semibold text-[#1a1f2e]">Enrichment Completed</h2>
             </div>
             <p className="text-[13px] text-[#6b7280] mt-1">
+              {scopeLabel && <>Scope: <span className="font-semibold text-[#374151]">{scopeLabel}</span> &middot; </>}
               Selection Code: <span className="font-mono text-[#1a5fa6] font-semibold">{code}</span> — {metadata.description} &middot; {completedAt}
             </p>
           </div>
@@ -958,6 +962,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, onBack,
             </span>
           </div>
           <p className="text-[13px] text-[#6b7280] mt-1">
+            {scopeLabel && <>Enriching <span className="font-semibold text-[#374151]">{scopeLabel}</span> &middot; </>}
             Selection Code: <span className="font-mono text-[#1a5fa6] font-semibold">{code}</span> — {metadata.description} ({metadata.gtins} GTINs)
           </p>
           {/* Progress bar */}
