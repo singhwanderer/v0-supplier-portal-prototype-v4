@@ -96,12 +96,13 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
   const selectedWithoutCategory = selectedRows.length - selectedWithCategory.length
 
   // Expectation-setting copy for the bulk CTA — names the screen the button
-  // actually opens, so the promise matches what happens next.
+  // actually opens, so the promise matches what happens next. Enrichment
+  // includes assigning the category, so an uncategorized product isn't blocked.
   const enrichHelperText = selectedRows.length === 0
-    ? "Select products to enrich. Products need a category before attributes can be enriched."
+    ? "Select products to enrich. AI suggests a category for anything uncategorized, then attribute values — you confirm both."
     : selectedWithoutCategory === 0
       ? `Next: AI will suggest attribute values for the ${selectedRows.length} selected product${selectedRows.length === 1 ? "" : "s"} — you review and confirm before anything is saved.`
-      : `Next: assign a category to ${selectedWithoutCategory} product${selectedWithoutCategory === 1 ? "" : "s"} — ${selectedWithCategory.length} of ${selectedRows.length} selected already ${selectedWithCategory.length === 1 ? "has one" : "have one"} and ${selectedWithCategory.length === 1 ? "keeps it" : "keep theirs"}. Attribute enrichment follows.`
+      : `Next: AI will suggest a category for ${selectedWithoutCategory} uncategorized product${selectedWithoutCategory === 1 ? "" : "s"} for you to confirm${selectedWithCategory.length > 0 ? ` — the other ${selectedWithCategory.length} keep the categories they have` : ""}. Attribute enrichment follows.`
 
   const handleBulkEnrich = () => {
     if (selectedRows.length === 0) return
@@ -272,9 +273,12 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                   <td className="px-3 py-2">
                     <button
                       onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category }])}
-                      disabled={row.category === null}
-                      title={row.category === null ? "Assign a category first" : `Enrich ${row.id} with AI`}
-                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                      title={
+                        row.category === null
+                          ? `Enrich ${row.id} with AI — it will suggest a category first`
+                          : `Enrich ${row.id} with AI`
+                      }
+                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
                     >
                       <Sparkles className="w-3 h-3" aria-hidden="true" />
                       Enrich

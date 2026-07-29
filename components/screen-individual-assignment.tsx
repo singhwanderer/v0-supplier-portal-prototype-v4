@@ -65,8 +65,9 @@ const LOW_CONFIDENCE_PRODUCTS: UnassignedProduct[] = [
   { id: "lc-b4", product: "Beaded stretch bracelet", gtins: 3, category: "Unassigned" },
 ]
 
-// Category options organized by parent
-const CATEGORY_OPTIONS: CategoryOptionGroup[] = [
+// Category options organized by parent. Exported as the cross-category picker
+// for flows that aren't scoped to one selection code's taxonomy.
+export const ALL_CATEGORY_OPTIONS: CategoryOptionGroup[] = [
   {
     parent: "Footwear",
     children: [
@@ -134,7 +135,7 @@ export function ScreenIndividualAssignment({
       ? UNCLASSIFIED_PRODUCTS
       : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
 
-  const pickerOptions = categoryOptions ?? CATEGORY_OPTIONS
+  const pickerOptions = categoryOptions ?? ALL_CATEGORY_OPTIONS
   const backLabel = onProceed ? "Back" : "Back to Quick Pick"
 
   const [products, setProducts] = useState<UnassignedProduct[]>(initialProducts)
