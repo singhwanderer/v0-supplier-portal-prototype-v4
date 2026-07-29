@@ -2,113 +2,32 @@
 
 import { useState, useMemo, useRef, useEffect } from "react"
 import { ChevronRight, ChevronDown, Check, X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react"
-
-// GS1 code list values keyed by attribute name.
-// Each entry has a human-readable label and its GS1 code.
-// Attributes without a code list allow free-text only.
-const CODE_LIST_VALUES: Record<string, { label: string; code: string }[]> = {
-  Closure: [
-    { label: "Adjustable/Pull",      code: "GM03CLOSAP" },
-    { label: "Back",                  code: "GM03CLOSBC" },
-    { label: "Back Button/Zip",       code: "GM03CLOSBB" },
-    { label: "Back Hook/Zip",         code: "GM03CLOSBH" },
-    { label: "Barrel",                code: "GM03CLOSBA" },
-    { label: "Box Tab Insert",        code: "GM03CLOSBT" },
-    { label: "Buckle",                code: "GM03CLOSBU" },
-    { label: "Button",                code: "GM03CLOSBN" },
-    { label: "Button Back",           code: "GM03CLOSBK" },
-    { label: "Button Front",          code: "GM03CLOSBF" },
-    { label: "Button Front Partial",  code: "GM03CLOSBP" },
-    { label: "Button Shoulder",       code: "GM03CLOSBS" },
-    { label: "Clasp",                 code: "GM03CLOSCL" },
-    { label: "Click Top",             code: "GM03CLOSCT" },
-    { label: "Clip On",               code: "GM03CLOSCO" },
-    { label: "Drawstring",            code: "GM03CLOSDS" },
-    { label: "Drawstring Front",      code: "GM03CLOSDF" },
-    { label: "Drawstring Elastic",    code: "GM03CLOSDE" },
-    { label: "D Ring",                code: "GM03CLOSDR" },
-    { label: "Elastic Lace with Toggle", code: "GM03CLOSET" },
-    { label: "Fishhook",              code: "GM03CLOSFS" },
-    { label: "Flap",                  code: "GM03CLOSFP" },
-    { label: "Foldover",              code: "GM03CLOSFO" },
-    { label: "French Wire",           code: "GM03CLOSFW" },
-    { label: "Frog/Button Loop",      code: "GM03CLOSFA" },
-    { label: "Front Button/Zip",      code: "GM03CLOSFZ" },
-    { label: "Front Hook/Zip",        code: "GM03CLOSFH" },
-    { label: "Hidden Button Front",   code: "GM03CLOSHB" },
-    { label: "Hidden Snap Front",     code: "GM03CLOSHS" },
-    { label: "Hidden Zip Front",      code: "GM03CLOSHZ" },
-    { label: "Hinged",                code: "GM03CLOSHI" },
-    { label: "Hinged/Foldover",       code: "GM03CLOSHE" },
-    { label: "Hook",                  code: "GM03CLOSHO" },
-    { label: "Lace-up Front",         code: "GM03CLOSLF" },
-    { label: "Latch",                 code: "GM03CLOSLA" },
-    { label: "Leverback",             code: "GM03CLOSLB" },
-    { label: "Lift-Lock",             code: "GM03CLOSLL" },
-    { label: "Link/Clasp",            code: "GM03CLOSLC" },
-    { label: "Lobster Claw",          code: "GM03CLOSLW" },
-    { label: "Magnetic",              code: "GM03CLOSMG" },
-    { label: "O Ring",                code: "GM03CLOSDO" },
-    { label: "Pierced Post",          code: "GM03CLOSPP" },
-    { label: "Push-Lock",             code: "GM03CLOSPL" },
-    { label: "Side Button/Zip",       code: "GM03CLOSSB" },
-    { label: "Side Hook/Zip",         code: "GM03CLOSSZ" },
-    { label: "Slip-on",               code: "GM03CLOSSL" },
-    { label: "Snap",                  code: "GM03CLOSN"  },
-    { label: "Snap Back",             code: "GM03CLOSSM" },
-    { label: "Snap Front",            code: "GM03CLOSSF" },
-    { label: "Snap Front Partial",    code: "GM03CLOSS2" },
-    { label: "Snap Legs",             code: "GM03CLOSSE" },
-    { label: "Snap Shoulder",         code: "GM03CLOSSS" },
-    { label: "Snap Post",             code: "GM03CLOSSA" },
-    { label: "String",                code: "GM03CLOSSR" },
-    { label: "Swivel",                code: "GM03CLOSSW" },
-    { label: "Tab",                   code: "GM03CLOSTB" },
-    { label: "Tie",                   code: "GM03CLOSTI" },
-    { label: "Tie Back/Halter",       code: "GM03CLOSTH" },
-    { label: "Tie Front",             code: "GM03CLOSTF" },
-    { label: "Tie Side",              code: "GM03CLOSTS" },
-    { label: "Toggle",                code: "GM03CLOSTO" },
-    { label: "Toggle Front",          code: "GM03CLOSTN" },
-    { label: "Top Zip",               code: "GM03CLOSTZ" },
-    { label: "Tunnel Side Tie",       code: "GM03CLOSTQ" },
-    { label: "Turn Lock",             code: "GM03CLOSTL" },
-    { label: "Velcro",                code: "GM03CLOSVC" },
-    { label: "Wrap",                  code: "GM03CLOSWR" },
-    { label: "Zip",                   code: "GM03CLOSZI" },
-    { label: "Zipper Back",           code: "GM03CLOSZB" },
-    { label: "Zipper Back Partial",   code: "GM03CLOSZP" },
-  ],
-  "Fabric or Material Code": [
-    { label: "Canvas",    code: "GM03FABCA" },
-    { label: "Leather",   code: "GM03FABLE" },
-    { label: "Mesh",      code: "GM03FABME" },
-    { label: "Suede",     code: "GM03FABSU" },
-    { label: "Synthetic", code: "GM03FABSY" },
-    { label: "Textile",   code: "GM03FABTE" },
-  ],
-  "Faux Fur": [
-    { label: "Yes", code: "GM03FFYES" },
-    { label: "No",  code: "GM03FFNO"  },
-  ],
-}
+import {
+  getAttributesForBricks,
+  getReasoningFor,
+  getSuggestionsFor,
+  type AttributeDef,
+} from "@/lib/category-attributes"
+import { getCodeListValues } from "@/lib/gs1-code-lists"
 
 // Inline combo-box: shows GS1 code list as a searchable dropdown when available,
 // always allows free text. Used for editing a single GTIN attribute value.
 function AttributeValueCombobox({
   attributeName,
+  codeList,
   value,
   onChange,
   onSave,
   onCancel,
 }: {
   attributeName: string
+  codeList?: string
   value: string
   onChange: (v: string) => void
   onSave: () => void
   onCancel: () => void
 }) {
-  const options = CODE_LIST_VALUES[attributeName] ?? []
+  const options = getCodeListValues(codeList)
   const hasCodeList = options.length > 0
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
@@ -220,6 +139,8 @@ interface ScreenAIEnrichmentReviewProps {
   // Scenario 2: when enrichment runs for specific products (not a whole selection code),
   // this labels the scope in the header, e.g. "Product B11442 — Leather ankle boot set"
   scopeLabel?: string
+  /** GS1 bricks in scope — decides which attributes are asked for. */
+  brickCodes?: string[]
   onBack: () => void
   onComplete: (confirmedPercentage: number, codes: string[]) => void
 }
@@ -241,102 +162,6 @@ interface AttributeGroup {
   gtins: GTINAttribute[]
 }
 
-// Reasoning patterns keyed to attribute names.
-// User-facing: only the product category matters; the underlying taxonomy is not surfaced.
-// Prompt 2: Removed Advertised Origin and Toe Shape, added Faux Fur
-const reasoningPatterns: Record<string, (desc: string, gtin: string) => string> = {
-  "Brand Name":              () => "Extracted from product title",
-  "Care Instructions":       () => "Matched to standard care label codes",
-  "Closure":                 (desc) => desc.toLowerCase().includes("lace") ? '"lace-up" found in description' : "Common closure for this category",
-  "Country of Origin":       () => "Sourced from product data",
-  "Fabric or Material Code": (desc) => desc.toLowerCase().includes("suede") ? '"suede" detected in title' : "Inferred from product image analysis",
-  "Faux Fur":                () => "Checked material content for fur/faux fur",
-  "Gender":                  () => "Inferred from product title and category",
-  "Heel Height":             () => "Estimated from product measurements",
-  "Lining Material":         () => "Inferred from category norms",
-  "Open/Closed Toe":         (desc) => desc.toLowerCase().includes("sandal") ? "Open toe for sandals" : "Standard for this shoe type",
-  "Shoe Type":               () => "Derived from product category",
-  "Sole Material":           () => "Inferred from category and price tier",
-  "Upper Material":          (desc) => desc.toLowerCase().includes("suede") ? '"suede" found in description' : "Material inferred from product data",
-  "Waterproof":              () => "Checked product description for water resistance claims",
-}
-
-// Footwear attribute applicability table.
-// `appliesTo` carries internal category IDs used for lookup only — never shown to users.
-//   10001077 = Shoes - General Purpose
-//   10001076 = Boots - General Purpose
-//   10001070 = Athletic Footwear - General Purpose
-interface FootwearAttributeDef {
-  name: string
-  suggestions: string[]
-  appliesTo: ("10001077" | "10001076" | "10001070")[]
-}
-
-// 14 attributes per specification.
-// avgConfidence: attribute-level average used for the confidence bar and avg-confidence badge rule.
-// minProductConfidence: lowest individual product VALUE confidence for this attribute — drives the
-//   "VALUE confidence is orange/red" badge rule independently of avgConfidence.
-// needsReview is derived at render time from avgConfidence and minProductConfidence; not stored here.
-const ATTRIBUTES = [
-  // ── Green attributes (avg ≥90%, all product values ≥90%) — no "Needs review" ──────────────────
-  { name: "Brand Name",              productsApplicable: 125, avgConfidence: 0.96, minProductConfidence: 0.97 },
-  { name: "Care Instructions",       productsApplicable: 108, avgConfidence: 0.94, minProductConfidence: 0.92 },
-  { name: "Country of Origin",       productsApplicable: 125, avgConfidence: 0.93, minProductConfidence: 0.91 },
-  { name: "Faux Fur",                productsApplicable: 85,  avgConfidence: 0.95, minProductConfidence: 0.93 },
-  { name: "Gender",                  productsApplicable: 102, avgConfidence: 0.97, minProductConfidence: 0.96 },
-  { name: "Lining Material",         productsApplicable: 96,  avgConfidence: 0.92, minProductConfidence: 0.90 },
-  { name: "Open/Closed Toe",         productsApplicable: 105, avgConfidence: 0.91, minProductConfidence: 0.90 },
-  { name: "Shoe Type",               productsApplicable: 88,  avgConfidence: 0.93, minProductConfidence: 0.91 },
-  { name: "Waterproof",              productsApplicable: 75,  avgConfidence: 0.94, minProductConfidence: 0.92 },
-  // ── Needs review: avg confidence orange/red (avg < 90%) ─────────────────────────────────────────
-  { name: "Heel Height",             productsApplicable: 110, avgConfidence: 0.84, minProductConfidence: 0.91 },
-  // avg is orange (84%) → "Needs review" from rule (c), even though product values are green
-  { name: "Sole Material",           productsApplicable: 92,  avgConfidence: 0.67, minProductConfidence: 0.90 },
-  // avg is red (67%) → "Needs review" from rule (c)
-  // ── Needs review: VALUE confidence orange/red (minProductConfidence < 90%) ───────────────────────
-  { name: "Closure",                 productsApplicable: 112, avgConfidence: 0.91, minProductConfidence: 0.79 },
-  // avg is green but a product value is 79% (red) → "Needs review" from rule (b)
-  { name: "Fabric or Material Code", productsApplicable: 98,  avgConfidence: 0.90, minProductConfidence: 0.83 },
-  // avg is green but a product value is 83% (orange) → "Needs review" from rule (b)
-  // ── Needs review: attribute has no value (null suggestedValue) ───────────────────────────────────
-  { name: "Upper Material",          productsApplicable: 118, avgConfidence: 0.91, minProductConfidence: null },
-  // null minProductConfidence represents an attribute with no suggested value → rule (a)
-]
-
-// FOOTWEAR_ATTRIBUTES for attribute suggestions and brick mapping
-const FOOTWEAR_ATTRIBUTES: FootwearAttributeDef[] = [
-  { name: "Brand Name",              suggestions: ["Nike", "Adidas", "New Balance", "Clarks", "Timberland"],   appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Care Instructions",       suggestions: ["Wipe Clean", "Spot Clean", "Machine Wash", "Hand Wash"],   appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Closure",                 suggestions: ["Lace-up", "Zip", "Slip-on", "Velcro", "Buckle"],           appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Country of Origin",       suggestions: ["China", "Vietnam", "India", "Indonesia"],                  appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Fabric or Material Code", suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Textile"],      appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Faux Fur",                suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Gender",                  suggestions: ["Men", "Women", "Unisex", "Boys", "Girls"],                 appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Heel Height",             suggestions: ["Flat", "Low (<1in)", "Mid (1–2in)", "High (2–3in)"],       appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Lining Material",         suggestions: ["Leather", "Textile", "Mesh", "Synthetic"],                 appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Open/Closed Toe",         suggestions: ["Open Toe", "Closed Toe"],                                  appliesTo: ["10001077", "10001076"] },
-  { name: "Shoe Type",               suggestions: ["Sneaker", "Loafer", "Oxford", "Ankle Boot", "Running"],    appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Sole Material",           suggestions: ["Rubber", "EVA", "PU", "Leather"],                          appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Upper Material",          suggestions: ["Leather", "Suede", "Canvas", "Synthetic", "Mesh"],         appliesTo: ["10001077", "10001076", "10001070"] },
-  { name: "Waterproof",              suggestions: ["Yes", "No"],                                               appliesTo: ["10001077", "10001076", "10001070"] },
-]
-
-// Resolve the brick code from a category description (matches Brick Confirmation labels)
-function getBrickCode(description: string): "10001077" | "10001076" | "10001070" {
-  const desc = description.toLowerCase()
-  if (desc.includes("athletic")) return "10001070"
-  if (desc.includes("boots")) return "10001076"
-  return "10001077"
-}
-
-// Map selection codes to appropriate attributes — derived strictly from the brick matrix
-function getAttributesForCategory(description: string): { name: string; suggestions: string[] }[] {
-  const brickCode = getBrickCode(description)
-  return FOOTWEAR_ATTRIBUTES
-    .filter((attr) => attr.appliesTo.includes(brickCode))
-    .map(({ name, suggestions }) => ({ name, suggestions }))
-}
-
 function generateRandomGtin(): string {
   const prefixes = ["057421", "073665", "088854", "019283", "084756", "069312", "052847", "091638"]
   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)]
@@ -344,14 +169,14 @@ function generateRandomGtin(): string {
   return `${prefix}${suffix}`
 }
 
-// Only these 3 attributes have any low-confidence products — all others are fully auto-validated.
-// Change 3: Updated to match revised attribute list (Closure, Fabric or Material Code, Upper Material)
-const LOW_CONFIDENCE_ATTRIBUTES = new Set(["Closure", "Fabric or Material Code", "Upper Material"])
-
-// Generate attribute groups with unique suggestions per GTIN and reasoning
-function generateAttributeData(code: string, gtinCount: number, description: string): AttributeGroup[] {
-  const categoryAttributes = getAttributesForCategory(description)
-
+// Generate attribute groups with unique suggestions per GTIN and reasoning.
+// Attributes, their values and their confidence profile all come from the
+// category layer, so the questions asked follow the product's GS1 brick.
+function generateAttributeData(
+  gtinCount: number,
+  description: string,
+  attributes: AttributeDef[]
+): AttributeGroup[] {
   // Pre-generate all GTINs once so the same GTINs appear across all attributes
   const allGtins: { gtin: string; productDesc: string }[] = []
   for (let i = 0; i < gtinCount; i++) {
@@ -361,9 +186,11 @@ function generateAttributeData(code: string, gtinCount: number, description: str
     })
   }
 
-  return categoryAttributes.map(({ name: attrName, suggestions }) => {
+  return attributes.map((attr) => {
+    const suggestions = getSuggestionsFor(attr)
+
     let applicableGtinCount = gtinCount
-    if (attrName !== "Brand Name" && attrName !== "Country of Origin") {
+    if (attr.name !== "Brand Name" && attr.name !== "Country of Origin") {
       const percentage = 0.6 + Math.random() * 0.3
       applicableGtinCount = Math.max(1, Math.floor(gtinCount * percentage))
     }
@@ -371,17 +198,11 @@ function generateAttributeData(code: string, gtinCount: number, description: str
     const shuffledGtins = [...allGtins].sort(() => Math.random() - 0.5)
     const selectedGtins = shuffledGtins.slice(0, applicableGtinCount)
 
-    // For attributes that are NOT in the low-confidence set, all GTINs are high confidence (85-100).
-    // For the 3 designated low-confidence attributes, exactly 3-4 GTINs per attribute fall below 70.
-    const isLowConfidenceAttr = LOW_CONFIDENCE_ATTRIBUTES.has(attrName)
-    // How many GTINs in this attribute will be marked low-confidence (3 or 4, max)
-    const lowConfidenceSlots = isLowConfidenceAttr ? Math.min(selectedGtins.length, attrName === "Closure" ? 4 : 3) : 0
+    // Only the flagged attributes carry sub-70 rows; the rest are auto-validated.
+    const lowConfidenceSlots = Math.min(selectedGtins.length, attr.lowConfidenceSlots ?? 0)
 
     const gtins: GTINAttribute[] = selectedGtins.map((g, index) => {
       const gtinHash = g.gtin.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
-      const suggestion = suggestions[gtinHash % suggestions.length]
-      const reasoningFn = reasoningPatterns[attrName]
-      const reasoning = reasoningFn ? reasoningFn(g.productDesc, g.gtin) : "AI analysis of product data"
 
       // First `lowConfidenceSlots` GTINs get a sub-70 confidence score; the rest are high confidence.
       // Within low-confidence, the first slot always falls below 60 (suppressed suggestion),
@@ -396,26 +217,30 @@ function generateAttributeData(code: string, gtinCount: number, description: str
       return {
         gtin: g.gtin,
         productDescription: g.productDesc,
-        aiSuggestion: suggestion,
-        aiReasoning: reasoning,
+        aiSuggestion: suggestions[gtinHash % suggestions.length],
+        aiReasoning: getReasoningFor(attr.name, g.productDesc),
         confidence,
         status: "pending" as const,
       }
     })
 
-    return { attributeName: attrName, gtins }
+    return { attributeName: attr.name, gtins }
   })
 }
 
-export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLabel, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
+export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLabel, brickCodes, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Selection Code" }
   // Source of truth: use products count from previous screen (e.g., 125 for "Shoes - General Purpose")
   // Fall back to GTINs only if products is not provided
   const totalProducts = metadata.products || metadata.gtins
-  
+
+  // Attributes follow the categories in scope, not the selection code.
+  const attributes = useMemo(() => getAttributesForBricks(brickCodes ?? []), [brickCodes])
+  const attrDefByName = useMemo(() => new Map(attributes.map((a) => [a.name, a])), [attributes])
+
   const [attributeGroups, setAttributeGroups] = useState<AttributeGroup[]>(() =>
-    generateAttributeData(code, totalProducts, metadata.description)
+    generateAttributeData(totalProducts, metadata.description, attributes)
   )
   const [expandedAttributes, setExpandedAttributes] = useState<Set<string>>(new Set())
   const [editingGtin, setEditingGtin] = useState<{ attribute: string; gtin: string } | null>(null)
@@ -702,7 +527,9 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLa
     : 0
 
   // Header progress: attribute rows where all per-attribute GTINs are confirmed/batch-selected
-  const totalAttributeRows = ATTRIBUTES.length
+  // Follows the resolved attribute list — a fixed constant here would silently
+  // break the progress denominator for any category with a different set size.
+  const totalAttributeRows = attributeGroups.length
   const reviewedAttributeRows = attributeGroups.filter((group) => {
     const eligibleGtins = group.gtins.filter((g) => Math.round(g.confidence) >= 60) // confidence is already 0-100
     return eligibleGtins.length > 0 && eligibleGtins.every((gtin) => {
@@ -814,7 +641,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLa
       return s === "rejected"
     }).length
     const pending = group.gtins.length - confirmed - rejected
-    const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+    const attrDef = attrDefByName.get(group.attributeName)
     const avgConf = attrDef ? Math.round(attrDef.avgConfidence * 100) : Math.round(
       group.gtins.reduce((sum, g) => sum + g.confidence, 0) / group.gtins.length
     )
@@ -1145,20 +972,20 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLa
             // (i.e., the attribute has at least one product suggestion below 90%).
             .filter((group) => {
               if (!showLowConfidenceOnly) return true
-              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+              const attrDef = attrDefByName.get(group.attributeName)
               return attrDef ? attrDef.avgConfidence < 0.90 : false
             })
             .map((group) => {
               const isExpanded = expandedAttributes.has(group.attributeName)
-              // Use the actual GTIN count from the generated data (not ATTRIBUTES.productsApplicable)
-              const attrDef = ATTRIBUTES.find((a) => a.name === group.attributeName)
+              // Use the actual GTIN count from the generated data
+              const attrDef = attrDefByName.get(group.attributeName)
               const totalProductsForAttr = group.gtins.length
               // Count GTINs that are confirmed or batch-selected for this attribute
               const confirmedProductCount = group.gtins.filter((g) => {
                 const s = productStates[`${group.attributeName}|${g.productDescription}`] || "pending"
                 return s === "confirmed" || s === "batch-selected"
               }).length
-              // Use the ATTRIBUTES definition's avgConfidence (not GTIN average) so the
+              // Use the attribute definition's avgConfidence (not GTIN average) so the
               // "needs review" badge and confidence bar reflect per-attribute design data
               const avgConfidence = attrDef
                 ? Math.round(attrDef.avgConfidence * 100)
@@ -1323,6 +1150,7 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLa
                                   <div className="w-full max-w-[200px] mx-auto">
                                     <AttributeValueCombobox
                                       attributeName={group.attributeName}
+                                      codeList={attrDef?.codeList}
                                       value={editProductValue}
                                       onChange={setEditProductValue}
                                       onSave={() => saveProductEdit(group.attributeName, gtin.productDescription)}

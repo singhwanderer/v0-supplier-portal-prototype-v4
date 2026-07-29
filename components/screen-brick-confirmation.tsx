@@ -133,13 +133,13 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
       return
     }
     setSelectedEnrichId(cat.id)
-    const toEnrich: ConfirmedCategory[] = [{ id: cat.id, name: cat.name, gtinCount: cat.gtinCount, productCount: cat.productCount, confidence: cat.confidence }]
+    const toEnrich: ConfirmedCategory[] = [{ id: cat.id, name: cat.name, gtinCount: cat.gtinCount, productCount: cat.productCount, confidence: cat.confidence, brickCode: cat.brickCode }]
     onProceedToEnrichment(toEnrich)
   }
 
   const handleEnrichAll = () => {
     const toEnrich: ConfirmedCategory[] = confirmedList.filter(c => !c.enriched).map((c) => ({
-      id: c.id, name: c.name, gtinCount: c.gtinCount, productCount: c.productCount, confidence: c.confidence,
+      id: c.id, name: c.name, gtinCount: c.gtinCount, productCount: c.productCount, confidence: c.confidence, brickCode: c.brickCode,
     }))
     onProceedToEnrichment(toEnrich)
   }
@@ -483,7 +483,7 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
             <button
               onClick={() =>
                 onSaveAndExit(
-                  confirmedList.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, gtinCount: c.gtinCount, confidence: c.confidence }))
+                  confirmedList.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, gtinCount: c.gtinCount, confidence: c.confidence, brickCode: c.brickCode }))
                 )
               }
               className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"

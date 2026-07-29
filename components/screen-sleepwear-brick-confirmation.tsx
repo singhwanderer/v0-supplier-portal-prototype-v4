@@ -127,6 +127,7 @@ export function ScreenSleepwearBrickConfirmation({
     gtinCount: c.gtinCount,
     productCount: c.productCount,
     confidence: c.confidence,
+    brickCode: c.brickCode,
   })
 
   const handleEnrichSingle = (cat: SleepwearCategory) => {

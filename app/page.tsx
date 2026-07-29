@@ -25,6 +25,7 @@ import { ScreenSleepwearBrickConfirmation } from "@/components/screen-sleepwear-
 import { ScreenSleepwearBrickGtinList } from "@/components/screen-sleepwear-brick-gtin-list"
 import { ScreenSleepwearEnrichmentReview } from "@/components/screen-sleepwear-enrichment-review"
 import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
+import { getBricksForSelectionCode } from "@/lib/category-attributes"
 
 export interface ConfirmedCategory {
   id: string
@@ -32,6 +33,8 @@ export interface ConfirmedCategory {
   productCount: number  // Change 1: Primary unit is now products
   gtinCount: number     // GTINs shown for reference
   confidence: number
+  // Which GS1 brick this category maps to — decides the attribute set shown at review.
+  brickCode?: string
 }
 
 export type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "categories-assigned"
@@ -304,6 +307,20 @@ export default function Home() {
   const scopeProductCount = enrichmentProductScope?.length ?? 0
   const scopeGtinCount = enrichmentProductScope?.reduce((s, p) => s + p.gtins, 0) ?? 0
 
+  // Which GS1 bricks the review screen should ask attributes for, most specific
+  // source first: the products actually in scope, then the categories the user
+  // confirmed, then whatever the selection code covers.
+  const uniq = (codes: (string | undefined)[]) => Array.from(new Set(codes.filter((c): c is string => !!c)))
+  const scopeBrickCodes: string[] = (() => {
+    if (enrichmentProductScope) {
+      const fromProducts = uniq(enrichmentProductScope.map((p) => p.category?.brickCode))
+      if (fromProducts.length > 0) return fromProducts
+    }
+    const fromConfirmed = uniq(confirmedCategories.map((c) => c.brickCode))
+    if (fromConfirmed.length > 0) return fromConfirmed
+    return getBricksForSelectionCode(activeCode)
+  })()
+
   // The footwear review derives its totals from the metadata it's handed, so a
   // scoped run needs the scope's counts rather than the whole code's. (The
   // sleepwear review takes the scope directly and does this itself.)
@@ -420,6 +437,7 @@ export default function Home() {
               description: p.description,
               gtins: p.gtins,
             }))}
+            brickCodes={scopeBrickCodes}
             onBack={backFromEnrichment}
             onComplete={handleEnrichmentComplete}
           />
@@ -428,6 +446,7 @@ export default function Home() {
             selectedCodes={selectedSelectionCodes}
             codesMetadata={reviewCodesMetadata}
             scopeLabel={enrichmentScopeLabel ?? undefined}
+            brickCodes={scopeBrickCodes}
             onBack={backFromEnrichment}
             onComplete={handleEnrichmentComplete}
           />
@@ -633,6 +652,15 @@ export default function Home() {
             // directly into the standard attribute review flow.
             const syntheticCode = "FALLBACK"
             const estimatedProducts = Math.ceil(uploadedGtinCount / 2.3)
+            // Carry the confirmed brick so review asks for that category's attributes.
+            setConfirmedCategories([{
+              id: brickCode,
+              name: subLabel,
+              productCount: estimatedProducts,
+              gtinCount: uploadedGtinCount,
+              confidence: 100,
+              brickCode,
+            }])
             setSelectedSelectionCodes([syntheticCode])
             setSelectedCodesMetadata({
               [syntheticCode]: {
