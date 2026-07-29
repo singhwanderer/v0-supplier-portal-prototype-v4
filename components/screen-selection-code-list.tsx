@@ -18,9 +18,20 @@ interface SelectionCodeRow {
   status: EnrichmentStatus
 }
 
+// Rows carry their status and enrichment date downstream so later steps can
+// preserve a code's real history instead of resetting it to defaults.
+interface EmittedMetadata {
+  gtins: number
+  products: number
+  description: string
+  categoriesAssigned: number
+  status: EnrichmentStatus
+  lastEnrichedDate: string
+}
+
 interface ScreenSelectionCodeListProps {
-  onEnrichSelected: (codes: string[], metadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }>) => void
-  onOpenProductList?: (code: string, metadata: { gtins: number; products: number; description: string; categoriesAssigned: number }) => void
+  onEnrichSelected: (codes: string[], metadata: Record<string, EmittedMetadata>) => void
+  onOpenProductList?: (code: string, metadata: EmittedMetadata) => void
   enrichmentUpdates?: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string; categoriesAssigned?: number }>
   }
 
@@ -109,14 +120,20 @@ export function ScreenSelectionCodeList({ onEnrichSelected, onOpenProductList, e
     setSelectedRows(new Set())
   }
 
+const toMetadata = (r: SelectionCodeRow): EmittedMetadata => ({
+  gtins: r.gtins,
+  products: r.products,
+  description: r.description,
+  categoriesAssigned: r.categoriesAssigned,
+  status: r.status,
+  lastEnrichedDate: r.lastEnrichedDate,
+})
+
 const handleEnrichSelected = () => {
   const selectedData = sortedData.filter((r) => selectedRows.has(r.id))
-  const selectedCodes = selectedData.map((r) => r.code)
-  const metadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }> = {}
-  selectedData.forEach((r) => {
-    metadata[r.code] = { gtins: r.gtins, products: r.products, description: r.description, categoriesAssigned: r.categoriesAssigned }
-  })
-  onEnrichSelected(selectedCodes, metadata)
+  const metadata: Record<string, EmittedMetadata> = {}
+  selectedData.forEach((r) => { metadata[r.code] = toMetadata(r) })
+  onEnrichSelected(selectedData.map((r) => r.code), metadata)
   }
 
   // Expectation-setting copy under the Enrich CTA — tells the user exactly what
@@ -291,7 +308,7 @@ const handleEnrichSelected = () => {
                   </td>
                   <td className="px-3 py-2 font-mono">
                     <button
-                      onClick={() => onOpenProductList?.(row.code, { gtins: row.gtins, products: row.products, description: row.description, categoriesAssigned: row.categoriesAssigned })}
+                      onClick={() => onOpenProductList?.(row.code, toMetadata(row))}
                       className="text-[#1a5fa6] hover:underline focus:outline-none"
                       title={`View products in Selection Code ${row.code}`}
                     >

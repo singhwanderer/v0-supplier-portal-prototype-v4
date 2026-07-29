@@ -13,10 +13,18 @@ import { ScreenSelectionCode } from "@/components/screen-selection-code"
 import { ScreenSelectionCodeList } from "@/components/screen-selection-code-list"
 import { ScreenAIEnrichmentReview } from "@/components/screen-ai-enrichment-review"
 import { ScreenCategoryFallback } from "@/components/screen-category-fallback"
-import { ScreenIndividualAssignment } from "@/components/screen-individual-assignment"
+import {
+  ScreenIndividualAssignment,
+  type AssignableProduct,
+  type CategoryAssignment,
+} from "@/components/screen-individual-assignment"
 import { ScreenCategoryCoverage } from "@/components/screen-category-coverage"
 import { ScreenProductList, type DrillDownProduct } from "@/components/screen-product-list"
 import { ScreenGtinList } from "@/components/screen-gtin-list"
+import { ScreenSleepwearBrickConfirmation } from "@/components/screen-sleepwear-brick-confirmation"
+import { ScreenSleepwearBrickGtinList } from "@/components/screen-sleepwear-brick-gtin-list"
+import { ScreenSleepwearEnrichmentReview } from "@/components/screen-sleepwear-enrichment-review"
+import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
 
 export interface ConfirmedCategory {
   id: string
@@ -26,15 +34,25 @@ export interface ConfirmedCategory {
   confidence: number
 }
 
+export type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "categories-assigned"
+
 export interface SelectionCodeMetadata {
   gtins: number
   products: number
   description: string
   categoriesAssigned: number
+  // Carried from the list row so downstream handlers can preserve — rather than
+  // reset — a code's real status and enrichment history.
+  status?: EnrichmentStatus
+  lastEnrichedDate?: string
 }
 
-type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "categories-assigned"
 type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list"
+
+// Category assignment upgrades a code that had nothing, but never downgrades one
+// that is already being enriched.
+const statusAfterCategoryAssignment = (current?: EnrichmentStatus): EnrichmentStatus =>
+  current === "ai-enriched" || current === "in-progress" ? current : "categories-assigned"
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("selection-code-list")
@@ -46,6 +64,7 @@ export default function Home() {
   const [selectedBrickCode, setSelectedBrickCode] = useState<string>("")
   const [reviewCategoryKey, setReviewCategoryKey] = useState<string>("")
   const [selectedSelectionCodes, setSelectedSelectionCodes] = useState<string[]>([])
+  // Always the code's own numbers. Scope-specific counts live in enrichmentProductScope.
   const [selectedCodesMetadata, setSelectedCodesMetadata] = useState<Record<string, SelectionCodeMetadata>>({})
   const [enrichmentUpdates, setEnrichmentUpdates] = useState<Record<string, { status: EnrichmentStatus; lastEnrichedDate: string; categoriesAssigned?: number }>>({})
   // Tracks which entry point took the user into Brick Confirmation so we can adapt copy and routing
@@ -60,9 +79,23 @@ export default function Home() {
   const [drillDownProduct, setDrillDownProduct] = useState<DrillDownProduct | null>(null)
   // Products can't hold the "categories-assigned" code-level status — only enrichment states
   const [productEnrichmentUpdates, setProductEnrichmentUpdates] = useState<Record<string, "ai-enriched" | "in-progress" | "needs-enrichment">>({})
-  // When enrichment runs for specific products (not a whole selection code), track the scope
-  const [enrichmentProductScope, setEnrichmentProductScope] = useState<string[] | null>(null)
+  // Categories assigned to individual products during this session
+  const [productCategoryUpdates, setProductCategoryUpdates] = useState<Record<string, { name: string; brickCode: string }>>({})
+  // Which products of each code have been enriched, so a code can reach "AI Enriched"
+  // by enriching its products one at a time.
+  const [enrichedProductsByCode, setEnrichedProductsByCode] = useState<Record<string, string[]>>({})
+  // When enrichment runs for specific products (not a whole selection code)
+  const [enrichmentProductScope, setEnrichmentProductScope] = useState<DrillDownProduct[] | null>(null)
   const [enrichmentScopeLabel, setEnrichmentScopeLabel] = useState<string | null>(null)
+  // Products handed to the individual-assignment screen by the product-level flow
+  const [assignmentProducts, setAssignmentProducts] = useState<AssignableProduct[] | null>(null)
+
+  // The code the user is currently working in, whichever path they came through.
+  const activeCode = selectedSelectionCodes[0] ?? drillDownCode
+  const isSleepwearFlow = activeCode === SLEEPWEAR_SELECTION_CODE
+
+  const metaForCode = (code: string): SelectionCodeMetadata | null =>
+    selectedCodesMetadata[code] ?? (drillDownCode === code ? drillDownCodeMeta : null)
 
   const goHome = () => {
     // Selection Code List is the recommended entry point; Text File Upload is
@@ -79,6 +112,7 @@ export default function Home() {
     setDrillDownProduct(null)
     setEnrichmentProductScope(null)
     setEnrichmentScopeLabel(null)
+    setAssignmentProducts(null)
   }
 
   const shellScreen: "upload" | "summary" | "review" | "submission" | "selection-code-list" =
@@ -111,42 +145,64 @@ export default function Home() {
     ])
   )
 
-  // Scenario 3: persist category-assignment work and return to the Selection Code List.
-  // Rows keep their enrichment history; codes that were never enriched show the new
-  // "Categories Assigned – Not Enriched" status so users can come back and enrich later.
-  const handleSaveCategoriesAndExit = (assignedProductCount: number) => {
-    if (selectedSelectionCodes.length > 0 && assignedProductCount > 0) {
-      const next = { ...enrichmentUpdates }
-      selectedSelectionCodes.forEach((code) => {
-        const meta = selectedCodesMetadata[code]
+  // ── Coverage bookkeeping ────────────────────────────────────────────────────
+
+  /**
+   * Add newly categorized products to a code's coverage. Increments rather than
+   * overwrites, so categorizing three products in a drill-down can't wipe out
+   * the thirty-eight the code already had.
+   */
+  const addCoverage = (code: string, newlyAssigned: number) => {
+    if (newlyAssigned <= 0) return
+    const meta = metaForCode(code)
+    if (!meta) return
+    setEnrichmentUpdates((prev) => {
+      const prevEntry = prev[code]
+      const currentAssigned = prevEntry?.categoriesAssigned ?? meta.categoriesAssigned
+      return {
+        ...prev,
+        [code]: {
+          status: statusAfterCategoryAssignment(prevEntry?.status ?? meta.status),
+          lastEnrichedDate: prevEntry?.lastEnrichedDate ?? meta.lastEnrichedDate ?? "TBD",
+          categoriesAssigned: Math.min(meta.products, currentAssigned + newlyAssigned),
+        },
+      }
+    })
+  }
+
+  /** Mark a code fully categorized — only correct for whole-code confirmations. */
+  const setFullCoverage = (codes: string[]) => {
+    setEnrichmentUpdates((prev) => {
+      const next = { ...prev }
+      codes.forEach((code) => {
+        const meta = metaForCode(code)
         if (!meta) return
-        const prev = enrichmentUpdates[code]
-        const prevAssigned = prev?.categoriesAssigned ?? meta.categoriesAssigned ?? 0
+        const prevEntry = prev[code]
         next[code] = {
-          status: prev?.status === "ai-enriched" || prev?.status === "in-progress" ? prev.status : "categories-assigned",
-          lastEnrichedDate: prev?.lastEnrichedDate ?? "TBD",
-          categoriesAssigned: Math.min(meta.products, prevAssigned + assignedProductCount),
+          status: statusAfterCategoryAssignment(prevEntry?.status ?? meta.status),
+          lastEnrichedDate: prevEntry?.lastEnrichedDate ?? meta.lastEnrichedDate ?? "TBD",
+          categoriesAssigned: meta.products,
         }
       })
-      setEnrichmentUpdates(next)
-    }
+      return next
+    })
+  }
+
+  // Scenario 3: persist category-assignment work and return to the Selection Code List.
+  const handleSaveCategoriesAndExit = (assignedProductCount: number) => {
+    selectedSelectionCodes.forEach((code) => addCoverage(code, assignedProductCount))
     setScreen("selection-code-list")
   }
 
   // Scenario 2: enrichment scoped to specific products from the Product/GTIN drill-down
   const startProductScopedEnrichment = (products: DrillDownProduct[]) => {
-    const allHaveCategories = products.every((p) => p.category !== null)
+    if (products.length === 0) return
     const code = drillDownCode
+    const meta = drillDownCodeMeta
     setSelectedSelectionCodes([code])
-    setSelectedCodesMetadata({
-      [code]: {
-        gtins: products.reduce((s, p) => s + p.gtins, 0),
-        products: products.length,
-        description: drillDownCodeMeta?.description ?? "",
-        categoriesAssigned: products.filter((p) => p.category !== null).length,
-      },
-    })
-    setEnrichmentProductScope(products.map((p) => p.id))
+    // Keep the code's own numbers here — the scope lives in enrichmentProductScope.
+    if (meta) setSelectedCodesMetadata({ [code]: meta })
+    setEnrichmentProductScope(products)
     setEnrichmentScopeLabel(
       products.length === 1
         ? `Product ${products[0].id} — ${products[0].description}`
@@ -154,10 +210,111 @@ export default function Home() {
     )
     setBrickConfirmationSource("selection-code")
     setBrickConfirmationScope("all")
-    // Fully categorized selections go straight to review; anything uncategorized
-    // gets AI classification first (category assignment is AI-only).
-    setScreen(allHaveCategories ? "ai-enrichment-review" : "brick-confirmation")
+
+    // Products that already have a category keep it. Anything uncategorized goes
+    // to individual assignment first — the right altitude for a handful of
+    // products, and the only place a single product can be categorized.
+    const uncategorized = products.filter((p) => p.category === null)
+    if (uncategorized.length === 0) {
+      setAssignmentProducts(null)
+      setScreen("ai-enrichment-review")
+      return
+    }
+    setAssignmentProducts(
+      uncategorized.map((p) => ({ id: p.id, product: p.description, gtins: p.gtins }))
+    )
+    setScreen("individual-assignment")
   }
+
+  // Categories assigned to specific products in the drill-down flow
+  const handleScopedAssignments = (assignments: CategoryAssignment[]) => {
+    if (assignments.length > 0) {
+      setProductCategoryUpdates((prev) => {
+        const next = { ...prev }
+        assignments.forEach((a) => {
+          next[a.id] = { name: a.category, brickCode: a.brickCode }
+        })
+        return next
+      })
+      addCoverage(activeCode, assignments.length)
+    }
+    // Carry the freshly assigned categories into the enrichment scope.
+    setEnrichmentProductScope((prev) =>
+      prev
+        ? prev.map((p) => {
+            const match = assignments.find((a) => a.id === p.id)
+            return match ? { ...p, category: { name: match.category, brickCode: match.brickCode } } : p
+          })
+        : prev
+    )
+    setAssignmentProducts(null)
+    setScreen("ai-enrichment-review")
+  }
+
+  // Enrichment finished — update the code (and, for scoped runs, the products).
+  const handleEnrichmentComplete = (confirmedPercentage: number, codes: string[]) => {
+    const nextStatus: "ai-enriched" | "in-progress" | "needs-enrichment" =
+      confirmedPercentage >= 50 ? "ai-enriched"
+      : confirmedPercentage > 0 ? "in-progress"
+      : "needs-enrichment"
+    const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
+    const scopeIds = enrichmentProductScope?.map((p) => p.id) ?? null
+
+    // Track enriched products per code so enriching them one at a time can
+    // eventually take the whole code to "AI Enriched".
+    const enrichedByCode: Record<string, string[]> = { ...enrichedProductsByCode }
+    if (scopeIds) {
+      codes.forEach((code) => {
+        enrichedByCode[code] = Array.from(new Set([...(enrichedByCode[code] ?? []), ...scopeIds]))
+      })
+      setEnrichedProductsByCode(enrichedByCode)
+      setProductEnrichmentUpdates((prevMap) => {
+        const next = { ...prevMap }
+        scopeIds.forEach((id) => { next[id] = nextStatus })
+        return next
+      })
+    }
+
+    setEnrichmentUpdates((prev) => {
+      const next = { ...prev }
+      codes.forEach((code) => {
+        const meta = metaForCode(code)
+        const prevEntry = prev[code]
+        if (scopeIds) {
+          // Partial run: the code only reaches "AI Enriched" once every product has been.
+          const enrichedCount = enrichedByCode[code]?.length ?? 0
+          const coversWholeCode = meta ? enrichedCount >= meta.products : false
+          next[code] = {
+            status: coversWholeCode || prevEntry?.status === "ai-enriched" ? "ai-enriched" : "in-progress",
+            lastEnrichedDate: today,
+            categoriesAssigned: prevEntry?.categoriesAssigned ?? meta?.categoriesAssigned,
+          }
+        } else {
+          // Enriching a whole code implies its categories were all confirmed en route
+          next[code] = { status: nextStatus, lastEnrichedDate: today, categoriesAssigned: meta?.products }
+        }
+      })
+      return next
+    })
+  }
+
+  // Where "back" should land depends on whether the user came via a drill-down.
+  const backFromEnrichment = () => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")
+
+  const scopeProductCount = enrichmentProductScope?.length ?? 0
+  const scopeGtinCount = enrichmentProductScope?.reduce((s, p) => s + p.gtins, 0) ?? 0
+
+  // The footwear review derives its totals from the metadata it's handed, so a
+  // scoped run needs the scope's counts rather than the whole code's. (The
+  // sleepwear review takes the scope directly and does this itself.)
+  const reviewCodesMetadata: Record<string, SelectionCodeMetadata> = enrichmentProductScope
+    ? Object.fromEntries(
+        Object.entries(effectiveCodesMetadata).map(([code, meta]) => [
+          code,
+          { ...meta, products: scopeProductCount, gtins: scopeGtinCount },
+        ])
+      )
+    : effectiveCodesMetadata
 
   return (
     <AppShell
@@ -173,6 +330,9 @@ export default function Home() {
             setUploadedGtinCount(gtinCount)
             setBrickConfirmationSource("upload")
             setBrickConfirmationScope("all")
+            setEnrichmentProductScope(null)
+            setEnrichmentScopeLabel(null)
+            setSelectedSelectionCodes([])
             setScreen("brick-confirmation")
           }}
           onCategoryResolutionFailed={() => setScreen("category-fallback")}
@@ -188,6 +348,7 @@ export default function Home() {
             setBrickConfirmationScope("all")
             setEnrichmentProductScope(null)
             setEnrichmentScopeLabel(null)
+            setAssignmentProducts(null)
             // Codes with existing category assignments go through the Category Coverage
             // view first; codes with none follow the original AI-classification flow.
             const hasAssignments = codes.some((code) => {
@@ -227,6 +388,7 @@ export default function Home() {
             categoriesAssigned: enrichmentUpdates[drillDownCode]?.categoriesAssigned ?? drillDownCodeMeta.categoriesAssigned,
           }}
           productEnrichmentUpdates={productEnrichmentUpdates}
+          productCategoryUpdates={productCategoryUpdates}
           onBack={() => setScreen("selection-code-list")}
           onOpenGtinList={(product) => {
             setDrillDownProduct(product)
@@ -248,56 +410,38 @@ export default function Home() {
       )}
 
       {screen === "ai-enrichment-review" && (
-        <ScreenAIEnrichmentReview
-          selectedCodes={selectedSelectionCodes}
-          codesMetadata={selectedCodesMetadata}
-          scopeLabel={enrichmentScopeLabel ?? undefined}
-          onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
-          onComplete={(confirmedPercentage, codes) => {
-            // Map confirmed percentage to a three-tier status.
-            //   ≥ 50%  → AI Enriched
-            //   > 0%   → In Progress
-            //   0%     → Needs Enrichment
-            const nextStatus: "ai-enriched" | "in-progress" | "needs-enrichment" =
-              confirmedPercentage >= 50 ? "ai-enriched"
-              : confirmedPercentage > 0 ? "in-progress"
-              : "needs-enrichment"
-            const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
-            const newUpdates: Record<string, { status: EnrichmentStatus; lastEnrichedDate: string; categoriesAssigned?: number }> = { ...enrichmentUpdates }
-            codes.forEach((code) => {
-              const prev = enrichmentUpdates[code]
-              if (enrichmentProductScope) {
-                // Product-scoped run: only part of the code was enriched, so don't claim
-                // full coverage — the code moves to In Progress unless already fully enriched.
-                newUpdates[code] = {
-                  status: prev?.status === "ai-enriched" ? "ai-enriched" : "in-progress",
-                  lastEnrichedDate: today,
-                  categoriesAssigned: prev?.categoriesAssigned,
-                }
-              } else {
-                // Enriching a whole code implies its categories were all confirmed en route
-                newUpdates[code] = { status: nextStatus, lastEnrichedDate: today, categoriesAssigned: selectedCodesMetadata[code]?.products }
-              }
-            })
-            setEnrichmentUpdates(newUpdates)
-            if (enrichmentProductScope) {
-              setProductEnrichmentUpdates((prevMap) => {
-                const next = { ...prevMap }
-                enrichmentProductScope.forEach((id) => { next[id] = nextStatus })
-                return next
-              })
-            }
-            // Stay on the review screen — the completed summary view renders inline
-          }}
-        />
+        isSleepwearFlow ? (
+          <ScreenSleepwearEnrichmentReview
+            selectedCodes={selectedSelectionCodes}
+            codesMetadata={effectiveCodesMetadata}
+            scopeLabel={enrichmentScopeLabel ?? undefined}
+            scopeProducts={enrichmentProductScope?.map((p) => ({
+              id: p.id,
+              description: p.description,
+              gtins: p.gtins,
+            }))}
+            onBack={backFromEnrichment}
+            onComplete={handleEnrichmentComplete}
+          />
+        ) : (
+          <ScreenAIEnrichmentReview
+            selectedCodes={selectedSelectionCodes}
+            codesMetadata={reviewCodesMetadata}
+            scopeLabel={enrichmentScopeLabel ?? undefined}
+            onBack={backFromEnrichment}
+            onComplete={handleEnrichmentComplete}
+          />
+        )
       )}
 
-      {screen === "brick-confirmation" && (
-        <ScreenBrickConfirmation
-          fileName={uploadedFileName}
-          totalGtinCount={
-            brickConfirmationSource === "selection-code"
-              ? selectedSelectionCodes.reduce((sum, code) => {
+      {screen === "brick-confirmation" && (() => {
+        // Scoped runs count only the products in scope; whole-code runs count the code.
+        const totalGtinCount =
+          brickConfirmationSource !== "selection-code"
+            ? uploadedGtinCount
+            : enrichmentProductScope
+              ? scopeGtinCount
+              : selectedSelectionCodes.reduce((sum, code) => {
                   const meta = effectiveCodesMetadata[code]
                   if (!meta) return sum
                   if (brickConfirmationScope === "unassigned-only" && meta.products > 0) {
@@ -306,89 +450,132 @@ export default function Home() {
                   }
                   return sum + meta.gtins
                 }, 0)
-              : uploadedGtinCount
-          }
-          totalProductCount={
-            brickConfirmationSource === "selection-code"
-              ? selectedSelectionCodes.reduce((sum, code) => {
+
+        const totalProductCount =
+          brickConfirmationSource !== "selection-code"
+            ? Math.ceil(uploadedGtinCount / 2.3) // Estimate products from GTINs
+            : enrichmentProductScope
+              ? scopeProductCount
+              : selectedSelectionCodes.reduce((sum, code) => {
                   const meta = effectiveCodesMetadata[code]
                   if (!meta) return sum
                   return sum + (brickConfirmationScope === "unassigned-only" ? meta.products - meta.categoriesAssigned : meta.products)
                 }, 0)
-              : Math.ceil(uploadedGtinCount / 2.3) // Estimate products from GTINs
+
+        const sourceContext = brickConfirmationSource === "selection-code"
+          ? { type: "selection-code" as const, codes: selectedSelectionCodes, metadata: selectedCodesMetadata }
+          : { type: "upload" as const, fileName: uploadedFileName }
+
+        const handleViewGtins = (categoryId: string, categoryName: string, brickCode: string) => {
+          setSelectedBrickCategoryId(categoryId)
+          setSelectedBrickCategoryName(categoryName)
+          setSelectedBrickCode(brickCode)
+          setScreen("brick-gtin-list")
+        }
+
+        const handleProceed = (categories: ConfirmedCategory[]) => {
+          setConfirmedCategories(categories)
+          if (brickConfirmationSource !== "selection-code") {
+            setScreen("summary")
+            return
           }
-          sourceContext={
-            brickConfirmationSource === "selection-code"
-              ? { type: "selection-code", codes: selectedSelectionCodes, metadata: selectedCodesMetadata }
-              : { type: "upload", fileName: uploadedFileName }
+          // Confirming categories for a whole code completes its coverage; a scoped
+          // run only adds the products it actually covered.
+          if (enrichmentProductScope) {
+            addCoverage(activeCode, categories.reduce((sum, c) => sum + c.productCount, 0))
+          } else {
+            setFullCoverage(selectedSelectionCodes)
           }
-          coverageScope={brickConfirmationScope}
-          onViewGtins={(categoryId, categoryName, brickCode) => {
-            setSelectedBrickCategoryId(categoryId)
-            setSelectedBrickCategoryName(categoryName)
-            setSelectedBrickCode(brickCode)
-            setScreen("brick-gtin-list")
-          }}
-          onProceedToEnrichment={(categories) => {
-            setConfirmedCategories(categories)
-            // From Selection Code List → go directly to attribute review.
-            // From upload → go to the traditional post-confirmation summary.
-            if (brickConfirmationSource === "selection-code") {
-              // Confirming categories en route to enrichment completes the code's coverage
-              const next = { ...enrichmentUpdates }
-              selectedSelectionCodes.forEach((code) => {
-                const meta = selectedCodesMetadata[code]
-                if (!meta) return
-                const prev = enrichmentUpdates[code]
-                next[code] = {
-                  status: prev?.status ?? "categories-assigned",
-                  lastEnrichedDate: prev?.lastEnrichedDate ?? "TBD",
-                  categoriesAssigned: meta.products,
-                }
-              })
-              setEnrichmentUpdates(next)
-              setScreen("ai-enrichment-review")
-            } else {
-              setScreen("summary")
-            }
-          }}
-          onBack={() => {
-            if (brickConfirmationScope === "unassigned-only") {
-              setScreen("category-coverage")
-            } else if (brickConfirmationSource === "selection-code") {
-              setScreen("selection-code-list")
-            } else {
-              goHome()
-            }
-          }}
-          onSaveAndExit={(categories) => {
-            if (categories.length > 0) {
-              setConfirmedCategories(categories)
-            }
-            handleSaveCategoriesAndExit(categories.reduce((sum, c) => sum + c.productCount, 0))
-          }}
-          onAssignIndividually={(scope) => {
-            setIndividualAssignmentScope(scope)
-            setScreen("individual-assignment")
-          }}
-        />
-      )}
+          setScreen("ai-enrichment-review")
+        }
+
+        const handleBack = () => {
+          if (enrichmentProductScope) setScreen("product-list")
+          else if (brickConfirmationScope === "unassigned-only") setScreen("category-coverage")
+          else if (brickConfirmationSource === "selection-code") setScreen("selection-code-list")
+          else goHome()
+        }
+
+        const handleSaveAndExit = (categories: ConfirmedCategory[]) => {
+          if (categories.length > 0) setConfirmedCategories(categories)
+          handleSaveCategoriesAndExit(categories.reduce((sum, c) => sum + c.productCount, 0))
+        }
+
+        const handleAssignIndividually = (scope: "unclassified" | "all-low-confidence") => {
+          setIndividualAssignmentScope(scope)
+          setAssignmentProducts(null)
+          setScreen("individual-assignment")
+        }
+
+        return isSleepwearFlow ? (
+          <ScreenSleepwearBrickConfirmation
+            totalGtinCount={totalGtinCount}
+            totalProductCount={totalProductCount}
+            sourceContext={sourceContext}
+            coverageScope={brickConfirmationScope}
+            scopeLabel={enrichmentScopeLabel ?? undefined}
+            onViewGtins={handleViewGtins}
+            onProceedToEnrichment={handleProceed}
+            onBack={handleBack}
+            onSaveAndExit={handleSaveAndExit}
+            onAssignIndividually={handleAssignIndividually}
+          />
+        ) : (
+          <ScreenBrickConfirmation
+            fileName={uploadedFileName}
+            totalGtinCount={totalGtinCount}
+            totalProductCount={totalProductCount}
+            sourceContext={sourceContext}
+            coverageScope={brickConfirmationScope}
+            onViewGtins={handleViewGtins}
+            onProceedToEnrichment={handleProceed}
+            onBack={handleBack}
+            onSaveAndExit={handleSaveAndExit}
+            onAssignIndividually={handleAssignIndividually}
+          />
+        )
+      })()}
 
       {screen === "individual-assignment" && (
         <ScreenIndividualAssignment
           scope={individualAssignmentScope}
-          onBack={() => setScreen("brick-confirmation")}
-          onSaveAndExit={(assignedCount) => handleSaveCategoriesAndExit(assignedCount)}
+          products={assignmentProducts ?? undefined}
+          categoryOptions={isSleepwearFlow ? SLEEPWEAR_CATEGORY_OPTIONS : undefined}
+          headline={
+            assignmentProducts
+              ? `Assign a category to ${assignmentProducts.length} product${assignmentProducts.length === 1 ? "" : "s"} before enriching`
+              : undefined
+          }
+          onBack={() => setScreen(assignmentProducts ? "product-list" : "brick-confirmation")}
+          onSaveAndExit={(assignedCount, _totalCount, assignments) => {
+            if (assignmentProducts && assignments) {
+              // Drill-down flow: persist onto the products and return to the list.
+              handleScopedAssignments(assignments)
+              setScreen("product-list")
+              return
+            }
+            handleSaveCategoriesAndExit(assignedCount)
+          }}
+          onProceed={assignmentProducts ? handleScopedAssignments : undefined}
         />
       )}
 
       {screen === "brick-gtin-list" && (
-        <ScreenBrickGtinList
-          categoryId={selectedBrickCategoryId}
-          categoryName={selectedBrickCategoryName}
-          brickCode={selectedBrickCode}
-          onBack={() => setScreen("brick-confirmation")}
-        />
+        isSleepwearFlow ? (
+          <ScreenSleepwearBrickGtinList
+            categoryId={selectedBrickCategoryId}
+            categoryName={selectedBrickCategoryName}
+            code={activeCode}
+            onBack={() => setScreen("brick-confirmation")}
+          />
+        ) : (
+          <ScreenBrickGtinList
+            categoryId={selectedBrickCategoryId}
+            categoryName={selectedBrickCategoryName}
+            brickCode={selectedBrickCode}
+            onBack={() => setScreen("brick-confirmation")}
+          />
+        )
       )}
 
       {screen === "summary" && (
@@ -455,6 +642,8 @@ export default function Home() {
                 categoriesAssigned: estimatedProducts,
               },
             })
+            setEnrichmentProductScope(null)
+            setEnrichmentScopeLabel(null)
             setScreen("ai-enrichment-review")
           }}
         />

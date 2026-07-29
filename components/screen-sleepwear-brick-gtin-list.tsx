@@ -1,0 +1,311 @@
+"use client"
+
+import { Fragment, useMemo, useState } from "react"
+import { ArrowLeft, ChevronDown, ChevronRight, ChevronLeft, Search } from "lucide-react"
+import {
+  SLEEPWEAR_AVAILABLE_CATEGORIES,
+  SLEEPWEAR_PRODUCTS_BY_CATEGORY,
+  type SleepwearProductRecord,
+} from "@/lib/sleepwear-catalog"
+
+// Product drill-down from a sleepwear category card. Rows carry Selection Code
+// 002 and real sleepwear products — the footwear version of this screen stamps
+// every row "001", which is wrong once you're inside the 002 flow.
+
+const ITEMS_PER_PAGE = 25
+
+interface ScreenSleepwearBrickGtinListProps {
+  categoryId: string
+  categoryName: string
+  code: string
+  onBack: () => void
+}
+
+export function ScreenSleepwearBrickGtinList({
+  categoryId,
+  categoryName,
+  code,
+  onBack,
+}: ScreenSleepwearBrickGtinListProps) {
+  const initialProducts = SLEEPWEAR_PRODUCTS_BY_CATEGORY[categoryId] ?? SLEEPWEAR_PRODUCTS_BY_CATEGORY["1"]
+  const [products, setProducts] = useState<SleepwearProductRecord[]>(initialProducts)
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set())
+  const [movingProduct, setMovingProduct] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((p) => {
+        if (p.declined) return false
+        return (
+          searchQuery === "" ||
+          p.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.childGtins.some((g) => g.gtin.includes(searchQuery))
+        )
+      }),
+    [products, searchQuery]
+  )
+
+  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE)
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  const activeCount = products.filter((p) => !p.declined).length
+
+  const toggleExpanded = (product: string) => {
+    setExpandedProducts((prev) => {
+      const next = new Set(prev)
+      if (next.has(product)) next.delete(product)
+      else next.add(product)
+      return next
+    })
+  }
+
+  const handleMoveCategory = (product: string, newCategory: string) => {
+    setProducts((prev) => prev.map((p) => (p.product === product ? { ...p, category: newCategory } : p)))
+    setMovingProduct(null)
+    setSelectedCategory("")
+  }
+
+  const handleDecline = (product: string) => {
+    setProducts((prev) => prev.map((p) => (p.product === product ? { ...p, declined: true } : p)))
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center justify-center w-8 h-8 rounded border border-[#d1d5db] bg-white hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+          aria-label="Back to categories"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#374151]" aria-hidden="true" />
+        </button>
+        <div>
+          <h2 className="text-[16px] font-semibold text-[#1a1f2e]">{categoryName}</h2>
+          <p className="text-[13px] text-[#6b7280]">
+            {activeCount} {activeCount === 1 ? "product" : "products"} in this category. Move any that don&apos;t fit, or
+            decline the ones you don&apos;t want to enrich.
+          </p>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center justify-between gap-4 flex-wrap bg-white border border-[#d1d5db] rounded p-3">
+        <div className="flex items-center gap-4 text-[12px]">
+          <span className="font-medium text-[#374151]">{activeCount} active</span>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#9ca3af]" aria-hidden="true" />
+          <input
+            type="text"
+            placeholder="Search product or GTIN..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="pl-8 pr-3 py-1.5 text-[12px] border border-[#d1d5db] rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#1a5fa6] w-56"
+          />
+        </div>
+      </div>
+
+      {/* Product table */}
+      <div className="rounded border border-[#d1d5db] bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#f7f8fa] border-b border-[#d1d5db]">
+                <th className="text-left px-3 py-2 font-semibold text-[#374151]">Product</th>
+                <th className="text-left px-3 py-2 font-semibold text-[#374151] w-16">GTINs</th>
+                <th className="text-left px-3 py-2 font-semibold text-[#374151] w-20">Sel. Code</th>
+                <th className="text-left px-3 py-2 font-semibold text-[#374151] w-28">Confidence</th>
+                <th className="text-left px-3 py-2 font-semibold text-[#374151]">Category</th>
+                <th className="text-left px-3 py-2 font-semibold text-[#374151] w-40">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedProducts.map((product, idx) => {
+                const isExpanded = expandedProducts.has(product.product)
+                const confidencePercent = Math.round(product.confidence * 100)
+                const isLowConfidence = confidencePercent < 85
+
+                return (
+                  <Fragment key={product.product}>
+                    <tr className={`border-b border-[#e5e7eb] ${idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}`}>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleExpanded(product.product)}
+                            className="p-0.5 rounded hover:bg-[#f3f4f6] transition-colors"
+                            aria-label={isExpanded ? "Collapse GTINs" : "Expand GTINs"}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-[#6b7280]" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-[#6b7280]" />
+                            )}
+                          </button>
+                          <span className="text-[#1a1f2e]">{product.product}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[#374151]">{product.gtins}</td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-[11px] px-1.5 py-0.5 bg-[#eff6ff] text-[#1a5fa6] rounded border border-[#bfdbfe]">
+                          {code}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full bg-[#e8eaed] overflow-hidden max-w-16">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${confidencePercent}%`,
+                                backgroundColor: isLowConfidence ? "#f59e0b" : "#2e7d32",
+                              }}
+                            />
+                          </div>
+                          <span className={`text-[12px] w-8 ${isLowConfidence ? "text-[#92400e]" : "text-[#374151]"}`}>
+                            {confidencePercent}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        {movingProduct === product.product ? (
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                className="appearance-none pl-2 pr-7 py-1 text-[12px] border border-[#d1d5db] rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#1a5fa6]"
+                              >
+                                <option value="">Select category...</option>
+                                {SLEEPWEAR_AVAILABLE_CATEGORIES.filter((c) => c !== product.category).map((cat) => (
+                                  <option key={cat} value={cat}>
+                                    {cat}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown
+                                className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#6b7280] pointer-events-none"
+                                aria-hidden="true"
+                              />
+                            </div>
+                            <button
+                              onClick={() => selectedCategory && handleMoveCategory(product.product, selectedCategory)}
+                              disabled={!selectedCategory}
+                              className="px-2 py-1 text-[11px] font-medium rounded bg-[#2e7d32] text-white hover:bg-[#1b5e20] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMovingProduct(null)
+                                setSelectedCategory("")
+                              }}
+                              className="px-2 py-1 text-[11px] font-medium rounded border border-[#d1d5db] bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[12px] text-[#6b7280]">{product.category}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {movingProduct !== product.product && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setMovingProduct(product.product)}
+                              className="px-2 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                            >
+                              Move
+                            </button>
+                            <button
+                              onClick={() => handleDecline(product.product)}
+                              className="px-2 py-1 text-[11px] font-medium border border-[#fecaca] rounded bg-white text-[#dc2626] hover:bg-[#fef2f2] transition-colors"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={6} className="p-0">
+                          <div className="bg-[#f9fafb] border-b border-[#e5e7eb]">
+                            <table className="w-full text-[12px]">
+                              <thead>
+                                <tr className="border-b border-[#e5e7eb]">
+                                  <th className="text-left px-6 py-1.5 font-medium text-[#6b7280] w-40">GTIN</th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Color Code</th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-[#6b7280]">Size Code</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {product.childGtins.map((child) => (
+                                  <tr key={child.gtin} className="border-b border-[#f3f4f6] last:border-0">
+                                    <td className="px-6 py-1.5 font-mono text-[11px] text-[#374151]">{child.gtin}</td>
+                                    <td className="px-3 py-1.5 text-[#374151]">{child.colorCode}</td>
+                                    <td className="px-3 py-1.5 text-[#374151]">{child.sizeCode}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-3 py-2 bg-[#f7f8fa] border-t border-[#d1d5db]">
+            <span className="text-[12px] text-[#6b7280]">
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+              {Math.min(currentPage * ITEMS_PER_PAGE, filteredProducts.length)} of {filteredProducts.length} products
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded border border-[#d1d5db] bg-white hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-[#374151]" />
+              </button>
+              <span className="px-2 text-[12px] text-[#374151]">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded border border-[#d1d5db] bg-white hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none"
+                aria-label="Next page"
+              >
+                <ChevronRight className="w-3.5 h-3.5 text-[#374151]" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2">
+        <button
+          onClick={onBack}
+          className="px-4 py-2 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+        >
+          Back to Categories
+        </button>
+      </div>
+    </div>
+  )
+}
