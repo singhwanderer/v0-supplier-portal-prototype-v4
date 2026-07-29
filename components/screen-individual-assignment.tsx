@@ -10,6 +10,26 @@ interface UnassignedProduct {
   product: string
   gtins: number
   category: string
+  brickCode?: string
+}
+
+/** A product handed in by the caller to be categorized. */
+export interface AssignableProduct {
+  id: string
+  product: string
+  gtins: number
+}
+
+/** What the user assigned, reported back so the caller can persist it. */
+export interface CategoryAssignment {
+  id: string
+  category: string
+  brickCode: string
+}
+
+export interface CategoryOptionGroup {
+  parent: string
+  children: { name: string; brickCode: string }[]
 }
 
 // Unclassified products (Could not classify)
@@ -46,7 +66,7 @@ const LOW_CONFIDENCE_PRODUCTS: UnassignedProduct[] = [
 ]
 
 // Category options organized by parent
-const CATEGORY_OPTIONS = [
+const CATEGORY_OPTIONS: CategoryOptionGroup[] = [
   {
     parent: "Footwear",
     children: [
@@ -83,19 +103,40 @@ const CATEGORY_OPTIONS = [
 
 interface ScreenIndividualAssignmentProps {
   scope: "unclassified" | "all-low-confidence"
+  /** Specific products to categorize. Omit to use the built-in list for the scope. */
+  products?: AssignableProduct[]
+  /** Category picker contents. Omit for the full cross-category list. */
+  categoryOptions?: CategoryOptionGroup[]
+  /** Overrides the heading when the caller has a more specific framing. */
+  headline?: string
   onBack: () => void
   // Scenario 3: save partial category assignments and return to the Selection Code List
-  onSaveAndExit?: (assignedCount: number, totalCount: number) => void
+  onSaveAndExit?: (assignedCount: number, totalCount: number, assignments?: CategoryAssignment[]) => void
+  /** When supplied, replaces "Done" with a forward action into enrichment. */
+  onProceed?: (assignments: CategoryAssignment[]) => void
+  proceedLabel?: string
 }
 
-export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: ScreenIndividualAssignmentProps) {
-  // Get the correct product list based on scope
-  const initialProducts = scope === "unclassified"
-    ? UNCLASSIFIED_PRODUCTS
-    : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
+export function ScreenIndividualAssignment({
+  scope,
+  products: scopedProducts,
+  categoryOptions,
+  headline,
+  onBack,
+  onSaveAndExit,
+  onProceed,
+  proceedLabel,
+}: ScreenIndividualAssignmentProps) {
+  // Caller-supplied products win; otherwise fall back to the list for this scope.
+  const initialProducts: UnassignedProduct[] = scopedProducts
+    ? scopedProducts.map((p) => ({ ...p, category: "Unassigned" }))
+    : scope === "unclassified"
+      ? UNCLASSIFIED_PRODUCTS
+      : [...LOW_CONFIDENCE_PRODUCTS, ...UNCLASSIFIED_PRODUCTS]
 
-  const backLabel = "Back to Quick Pick"
-  
+  const pickerOptions = categoryOptions ?? CATEGORY_OPTIONS
+  const backLabel = onProceed ? "Back" : "Back to Quick Pick"
+
   const [products, setProducts] = useState<UnassignedProduct[]>(initialProducts)
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState<string>("")
@@ -126,10 +167,13 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
     }
   }
 
+  const brickCodeFor = (categoryName: string) =>
+    pickerOptions.flatMap((g) => g.children).find((c) => c.name === categoryName)?.brickCode ?? ""
+
   // Assign category to a single product
   const assignCategory = (productId: string, categoryName: string) => {
-    setProducts(prev => 
-      prev.map(p => p.id === productId ? { ...p, category: categoryName } : p)
+    setProducts(prev =>
+      prev.map(p => p.id === productId ? { ...p, category: categoryName, brickCode: brickCodeFor(categoryName) } : p)
     )
     setOpenDropdown(null)
   }
@@ -137,12 +181,18 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
   // Apply bulk category to selected products
   const applyBulkCategory = () => {
     if (!bulkCategory || selectedProducts.size === 0) return
+    const brickCode = brickCodeFor(bulkCategory)
     setProducts(prev =>
-      prev.map(p => selectedProducts.has(p.id) ? { ...p, category: bulkCategory } : p)
+      prev.map(p => selectedProducts.has(p.id) ? { ...p, category: bulkCategory, brickCode } : p)
     )
     setSelectedProducts(new Set())
     setBulkCategory("")
   }
+
+  // What the user has actually assigned, for the caller to persist.
+  const assignments: CategoryAssignment[] = products
+    .filter((p) => p.category !== "Unassigned")
+    .map((p) => ({ id: p.id, category: p.category, brickCode: p.brickCode ?? "" }))
 
   return (
     <div className="space-y-4">
@@ -157,7 +207,7 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
         </button>
         <div>
           <h2 className="text-[16px] font-semibold text-[#1a1f2e]">
-            Help us confirm the product type — {remainingCount} Products remaining
+            {headline ?? `Help us confirm the product type — ${remainingCount} Products remaining`}
           </h2>
           <p className="text-[13px] text-[#6b7280]">
             {assignedCount} of {products.length} products assigned
@@ -174,7 +224,7 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
           className="px-2 py-1.5 text-[12px] border border-[#d1d5db] rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#1a5fa6]"
         >
           <option value="">Choose category...</option>
-          {CATEGORY_OPTIONS.map(group => (
+          {pickerOptions.map(group => (
             <optgroup key={group.parent} label={group.parent}>
               {group.children.map(cat => (
                 <option key={cat.brickCode} value={cat.name}>{cat.name}</option>
@@ -258,7 +308,7 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
                         </button>
                         {isDropdownOpen && (
                           <div className="absolute z-50 top-full left-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg">
-                            {CATEGORY_OPTIONS.map(group => (
+                            {pickerOptions.map(group => (
                               <div key={group.parent}>
                                 <div className="px-2 py-1.5 text-[10px] font-bold text-[#6b7280] uppercase tracking-wide bg-[#f9fafb]">
                                   {group.parent}
@@ -296,7 +346,7 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
           {onSaveAndExit && (
             <div className="text-right">
               <button
-                onClick={() => onSaveAndExit(assignedCount, products.length)}
+                onClick={() => onSaveAndExit(assignedCount, products.length, assignments)}
                 disabled={assignedCount === 0}
                 className="px-4 py-2 text-[13px] font-semibold border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -309,13 +359,26 @@ export function ScreenIndividualAssignment({ scope, onBack, onSaveAndExit }: Scr
               )}
             </div>
           )}
-          <button
-            onClick={onBack}
-            disabled={remainingCount > 0}
-            className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
-          >
-            Done — Return to Quick Pick
-          </button>
+          {onProceed ? (
+            // Product-scoped flow: assigning a category is a step on the way to
+            // enrichment, not the end of the task.
+            <button
+              onClick={() => onProceed(assignments)}
+              disabled={remainingCount > 0}
+              className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
+              title={remainingCount > 0 ? "Assign a category to every product first" : undefined}
+            >
+              {proceedLabel ?? `Continue to Enrichment (${assignedCount} ${assignedCount === 1 ? "product" : "products"})`}
+            </button>
+          ) : (
+            <button
+              onClick={onBack}
+              disabled={remainingCount > 0}
+              className="px-4 py-2 text-[13px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] disabled:bg-[#9ca3af] disabled:cursor-not-allowed transition-colors"
+            >
+              Done — Return to Quick Pick
+            </button>
+          )}
         </div>
       </div>
     </div>

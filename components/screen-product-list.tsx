@@ -62,15 +62,18 @@ interface ScreenProductListProps {
   code: string
   metadata: { gtins: number; products: number; description: string; categoriesAssigned: number }
   productEnrichmentUpdates: Record<string, ProductEnrichmentStatus>
+  /** Categories assigned during this session, so newly categorized products stop reading "Not assigned". */
+  productCategoryUpdates?: Record<string, { name: string; brickCode: string }>
   onBack: () => void
   onOpenGtinList: (product: DrillDownProduct) => void
   onEnrichProducts: (products: DrillDownProduct[]) => void
 }
 
-export function ScreenProductList({ code, metadata, productEnrichmentUpdates, onBack, onOpenGtinList, onEnrichProducts }: ScreenProductListProps) {
+export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, onBack, onOpenGtinList, onEnrichProducts }: ScreenProductListProps) {
   const baseRows = PRODUCTS_BY_CODE[code] ?? buildFallbackRows(code, metadata)
   const rows: ProductRow[] = baseRows.map((row) => ({
     ...row,
+    category: productCategoryUpdates?.[row.id] ?? row.category,
     status: productEnrichmentUpdates[row.id] ?? row.status,
   }))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -92,12 +95,13 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, on
   const selectedWithCategory = selectedRows.filter((r) => r.category !== null)
   const selectedWithoutCategory = selectedRows.length - selectedWithCategory.length
 
-  // Expectation-setting copy for the bulk CTA — no black box
+  // Expectation-setting copy for the bulk CTA — names the screen the button
+  // actually opens, so the promise matches what happens next.
   const enrichHelperText = selectedRows.length === 0
     ? "Select products to enrich. Products need a category before attributes can be enriched."
     : selectedWithoutCategory === 0
       ? `Next: AI will suggest attribute values for the ${selectedRows.length} selected product${selectedRows.length === 1 ? "" : "s"} — you review and confirm before anything is saved.`
-      : `Next: review category coverage — ${selectedWithCategory.length} of ${selectedRows.length} selected products have categories; you'll assign the remaining ${selectedWithoutCategory} before AI enriches attributes.`
+      : `Next: assign a category to ${selectedWithoutCategory} product${selectedWithoutCategory === 1 ? "" : "s"} — ${selectedWithCategory.length} of ${selectedRows.length} selected already ${selectedWithCategory.length === 1 ? "has one" : "have one"} and ${selectedWithCategory.length === 1 ? "keeps it" : "keep theirs"}. Attribute enrichment follows.`
 
   const handleBulkEnrich = () => {
     if (selectedRows.length === 0) return
