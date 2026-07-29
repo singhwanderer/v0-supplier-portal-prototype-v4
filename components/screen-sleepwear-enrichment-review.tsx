@@ -2,15 +2,20 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronRight, ChevronDown, Check, X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react"
+import { SLEEPWEAR_PRODUCTS_BY_CATEGORY } from "@/lib/sleepwear-catalog"
 import {
-  SLEEPWEAR_ATTRIBUTES,
-  SLEEPWEAR_CODE_LIST_VALUES,
-  SLEEPWEAR_PRODUCTS_BY_CATEGORY,
-  SLEEPWEAR_REASONING,
-  type SleepwearAttributeDef,
-} from "@/lib/sleepwear-catalog"
+  getAttributesForBricks,
+  getReasoningFor,
+  getSuggestionsFor,
+  type AttributeDef,
+} from "@/lib/category-attributes"
+import { getCodeListValues } from "@/lib/gs1-code-lists"
 
 // Attribute enrichment review for Selection Code 002 (Sleepwear).
+//
+// The attribute set is resolved from the GS1 bricks in scope, so a robe and a
+// pair of sleep shorts are asked different questions. Values come from the real
+// GS1 code lists.
 //
 // Differences from the footwear review beyond the data itself:
 //   · one attribute table instead of two parallel ones, so display metadata and
@@ -24,18 +29,20 @@ import {
 
 function AttributeValueCombobox({
   attributeName,
+  codeList,
   value,
   onChange,
   onSave,
   onCancel,
 }: {
   attributeName: string
+  codeList?: string
   value: string
   onChange: (v: string) => void
   onSave: () => void
   onCancel: () => void
 }) {
-  const options = SLEEPWEAR_CODE_LIST_VALUES[attributeName] ?? []
+  const options = getCodeListValues(codeList)
   const hasCodeList = options.length > 0
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
@@ -186,12 +193,14 @@ function buildProductPool(count: number, scopeProducts?: ScopeProduct[]): { gtin
 
 function generateAttributeData(
   productCount: number,
-  attributes: SleepwearAttributeDef[],
+  attributes: AttributeDef[],
   scopeProducts?: ScopeProduct[]
 ): AttributeGroup[] {
   const allProducts = buildProductPool(productCount, scopeProducts)
 
   return attributes.map((attr) => {
+    const suggestions = getSuggestionsFor(attr)
+
     // Brand and origin apply to everything; other attributes cover a subset.
     let applicableCount = allProducts.length
     if (attr.name !== "Brand Name" && attr.name !== "Country of Origin") {
@@ -206,8 +215,6 @@ function generateAttributeData(
 
     const gtins: ProductAttribute[] = selected.map((p, index) => {
       const hash = p.gtin.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
-      const suggestion = attr.suggestions[hash % attr.suggestions.length]
-      const reasoningFn = SLEEPWEAR_REASONING[attr.name]
 
       // The first low-confidence slot always lands below 60 so its suggestion is
       // suppressed; the rest sit in 61–68 and show with a flag.
@@ -221,8 +228,8 @@ function generateAttributeData(
       return {
         gtin: p.gtin,
         productDescription: p.productDesc,
-        aiSuggestion: suggestion,
-        aiReasoning: reasoningFn ? reasoningFn(p.productDesc) : "AI analysis of product data",
+        aiSuggestion: suggestions[hash % suggestions.length],
+        aiReasoning: getReasoningFor(attr.name, p.productDesc),
         confidence,
         status: "pending" as const,
       }
@@ -241,6 +248,8 @@ interface ScreenSleepwearEnrichmentReviewProps {
   scopeLabel?: string
   /** Real products in scope; when present, review rows use their identities. */
   scopeProducts?: ScopeProduct[]
+  /** GS1 bricks in scope — decides which attributes are asked for. */
+  brickCodes?: string[]
   onBack: () => void
   onComplete: (confirmedPercentage: number, codes: string[]) => void
 }
@@ -250,6 +259,7 @@ export function ScreenSleepwearEnrichmentReview({
   codesMetadata,
   scopeLabel,
   scopeProducts,
+  brickCodes,
   onBack,
   onComplete,
 }: ScreenSleepwearEnrichmentReviewProps) {
@@ -261,8 +271,11 @@ export function ScreenSleepwearEnrichmentReview({
     ? scopeProducts.reduce((s, p) => s + p.gtins, 0)
     : metadata.gtins
 
+  // Attributes follow the categories in scope, not the selection code.
+  const attributes = useMemo(() => getAttributesForBricks(brickCodes ?? []), [brickCodes])
+
   const [attributeGroups, setAttributeGroups] = useState<AttributeGroup[]>(() =>
-    generateAttributeData(totalProducts, SLEEPWEAR_ATTRIBUTES, scopeProducts)
+    generateAttributeData(totalProducts, attributes, scopeProducts)
   )
   const [expandedAttributes, setExpandedAttributes] = useState<Set<string>>(new Set())
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false)
@@ -278,10 +291,7 @@ export function ScreenSleepwearEnrichmentReview({
   const [isCompleted, setIsCompleted] = useState(false)
   const [completedAt, setCompletedAt] = useState("")
 
-  const attrDefByName = useMemo(
-    () => new Map(SLEEPWEAR_ATTRIBUTES.map((a) => [a.name, a])),
-    []
-  )
+  const attrDefByName = useMemo(() => new Map(attributes.map((a) => [a.name, a])), [attributes])
 
   const toggleProductGtins = (productName: string) => {
     setExpandedProductGtins((prev) => {
@@ -976,6 +986,7 @@ export function ScreenSleepwearEnrichmentReview({
                                     <div className="w-full max-w-[200px] mx-auto">
                                       <AttributeValueCombobox
                                         attributeName={group.attributeName}
+                                        codeList={attrDef?.codeList}
                                         value={editProductValue}
                                         onChange={setEditProductValue}
                                         onSave={() => saveProductEdit(group.attributeName, gtin.productDescription)}
