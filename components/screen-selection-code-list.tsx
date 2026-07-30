@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Sparkles, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, Layers } from "lucide-react"
+
+// The selection code that demonstrates product-level enrichment. The callout
+// above the table and the row accent both key off this, so pointing the demo at
+// a different code is a one-line change.
+const PRODUCT_LEVEL_DEMO_CODE = "002"
 
 type EnrichmentStatus = "ai-enriched" | "in-progress" | "needs-enrichment" | "categories-assigned"
 
@@ -136,6 +141,9 @@ const handleEnrichSelected = () => {
   onEnrichSelected(selectedData.map((r) => r.code), metadata)
   }
 
+  // The row the product-level callout points at.
+  const demoRow = data.find((r) => r.code === PRODUCT_LEVEL_DEMO_CODE)
+
   // Expectation-setting copy under the Enrich CTA — tells the user exactly what
   // clicking Enrich will do for the currently selected row (no black box).
   const selectedRow = sortedData.find((r) => selectedRows.has(r.id))
@@ -177,6 +185,38 @@ const handleEnrichSelected = () => {
           </div>
         </div>
       </div>
+
+      {/* Product-level enrichment callout — names the demo code explicitly so an
+          audience knows exactly where to look and what to click. */}
+      {demoRow && (
+        <div
+          className="flex items-start gap-2.5 px-4 py-3 rounded border-2 text-[13px]"
+          style={{ backgroundColor: "#eff6ff", borderColor: "#1a5fa6", color: "#1e40af" }}
+          role="status"
+        >
+          <Layers className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#1a5fa6" }} aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[#1a1f2e]">
+              Product-level enrichment is available on Selection Code {PRODUCT_LEVEL_DEMO_CODE} only
+            </p>
+            <p className="text-[12px] text-[#374151] mt-0.5">
+              {"Open "}
+              <strong>{`${PRODUCT_LEVEL_DEMO_CODE} — ${demoRow.description}`}</strong>
+              {` to see its ${demoRow.products} products, then enrich a single product, a selected few, or drill
+                further into a product's GTINs. Every other code enriches at the selection-code level.`
+                .replace(/\s+/g, " ")}
+            </p>
+          </div>
+          <button
+            onClick={() => onOpenProductList?.(demoRow.code, toMetadata(demoRow))}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+            style={{ backgroundColor: "#1a5fa6" }}
+          >
+            Open {PRODUCT_LEVEL_DEMO_CODE} Product List
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="bg-white border border-[#d1d5db] rounded px-4 py-2 space-y-1.5">
@@ -291,14 +331,16 @@ const handleEnrichSelected = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedData.map((row) => (
+              {sortedData.map((row) => {
+                const isProductLevelDemo = row.code === PRODUCT_LEVEL_DEMO_CODE
+                return (
                 <tr
                   key={row.id}
                   className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors ${
-                    selectedRows.has(row.id) ? "bg-[#eff6ff]" : ""
+                    selectedRows.has(row.id) ? "bg-[#eff6ff]" : isProductLevelDemo ? "bg-[#f5f9ff]" : ""
                   }`}
                 >
-                  <td className="px-3 py-2">
+                  <td className={`px-3 py-2 ${isProductLevelDemo ? "border-l-[3px] border-l-[#1a5fa6]" : ""}`}>
                     <input
                       type="checkbox"
                       checked={selectedRows.has(row.id)}
@@ -307,13 +349,31 @@ const handleEnrichSelected = () => {
                     />
                   </td>
                   <td className="px-3 py-2 font-mono">
-                    <button
-                      onClick={() => onOpenProductList?.(row.code, toMetadata(row))}
-                      className="text-[#1a5fa6] hover:underline focus:outline-none"
-                      title={`View products in Selection Code ${row.code}`}
-                    >
-                      {row.code}
-                    </button>
+                    <span className="inline-flex items-center gap-2">
+                      <button
+                        onClick={() => onOpenProductList?.(row.code, toMetadata(row))}
+                        className={`focus:outline-none hover:underline ${
+                          isProductLevelDemo ? "text-[#1a5fa6] font-semibold" : "text-[#1a5fa6]"
+                        }`}
+                        title={
+                          isProductLevelDemo
+                            ? `Open the product list for Selection Code ${row.code} — enrich individual products`
+                            : `View products in Selection Code ${row.code}`
+                        }
+                      >
+                        {row.code}
+                      </button>
+                      {isProductLevelDemo && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded font-sans"
+                          style={{ backgroundColor: "#dbeafe", color: "#1e40af" }}
+                          title="This selection code demonstrates enrichment at the individual product level"
+                        >
+                          <Layers className="w-2.5 h-2.5" aria-hidden="true" />
+                          Product-level
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-[#374151]">{row.description}</td>
                   <td className="px-3 py-2 text-right text-[#374151]">{row.products}</td>
@@ -368,7 +428,8 @@ const handleEnrichSelected = () => {
                     )}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

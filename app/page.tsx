@@ -15,6 +15,7 @@ import { ScreenAIEnrichmentReview } from "@/components/screen-ai-enrichment-revi
 import { ScreenCategoryFallback } from "@/components/screen-category-fallback"
 import {
   ScreenIndividualAssignment,
+  ALL_CATEGORY_OPTIONS,
   type AssignableProduct,
   type CategoryAssignment,
 } from "@/components/screen-individual-assignment"
@@ -24,6 +25,10 @@ import { ScreenGtinList } from "@/components/screen-gtin-list"
 import { ScreenSleepwearBrickConfirmation } from "@/components/screen-sleepwear-brick-confirmation"
 import { ScreenSleepwearBrickGtinList } from "@/components/screen-sleepwear-brick-gtin-list"
 import { ScreenSleepwearEnrichmentReview } from "@/components/screen-sleepwear-enrichment-review"
+import {
+  ScreenProductCategoryAssignment,
+  type CategorizableProduct,
+} from "@/components/screen-product-category-assignment"
 import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
 import { getBricksForSelectionCode } from "@/lib/category-attributes"
 
@@ -50,7 +55,7 @@ export interface SelectionCodeMetadata {
   lastEnrichedDate?: string
 }
 
-type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list"
+type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list" | "product-category-assignment"
 
 // Category assignment upgrades a code that had nothing, but never downgrades one
 // that is already being enriched.
@@ -92,6 +97,8 @@ export default function Home() {
   const [enrichmentScopeLabel, setEnrichmentScopeLabel] = useState<string | null>(null)
   // Products handed to the individual-assignment screen by the product-level flow
   const [assignmentProducts, setAssignmentProducts] = useState<AssignableProduct[] | null>(null)
+  // Uncategorized products awaiting AI's category proposal in the product-level flow
+  const [categorizableProducts, setCategorizableProducts] = useState<CategorizableProduct[] | null>(null)
 
   // The code the user is currently working in, whichever path they came through.
   const activeCode = selectedSelectionCodes[0] ?? drillDownCode
@@ -116,6 +123,7 @@ export default function Home() {
     setEnrichmentProductScope(null)
     setEnrichmentScopeLabel(null)
     setAssignmentProducts(null)
+    setCategorizableProducts(null)
   }
 
   const shellScreen: "upload" | "summary" | "review" | "submission" | "selection-code-list" =
@@ -214,33 +222,32 @@ export default function Home() {
     setBrickConfirmationSource("selection-code")
     setBrickConfirmationScope("all")
 
-    // Products that already have a category keep it. Anything uncategorized goes
-    // to individual assignment first — the right altitude for a handful of
-    // products, and the only place a single product can be categorized.
+    // Products that already have a category keep it. For anything uncategorized,
+    // AI proposes a category first and the user confirms — assigning the category
+    // is part of enrichment, not something the supplier has to do beforehand.
     const uncategorized = products.filter((p) => p.category === null)
     if (uncategorized.length === 0) {
-      setAssignmentProducts(null)
+      setCategorizableProducts(null)
       setScreen("ai-enrichment-review")
       return
     }
-    setAssignmentProducts(
-      uncategorized.map((p) => ({ id: p.id, product: p.description, gtins: p.gtins }))
+    setCategorizableProducts(
+      uncategorized.map((p) => ({ id: p.id, description: p.description, gtins: p.gtins }))
     )
-    setScreen("individual-assignment")
+    setScreen("product-category-assignment")
   }
 
-  // Categories assigned to specific products in the drill-down flow
-  const handleScopedAssignments = (assignments: CategoryAssignment[]) => {
-    if (assignments.length > 0) {
-      setProductCategoryUpdates((prev) => {
-        const next = { ...prev }
-        assignments.forEach((a) => {
-          next[a.id] = { name: a.category, brickCode: a.brickCode }
-        })
-        return next
+  // Persist categories assigned to specific products in the drill-down flow.
+  const applyScopedAssignments = (assignments: CategoryAssignment[]) => {
+    if (assignments.length === 0) return
+    setProductCategoryUpdates((prev) => {
+      const next = { ...prev }
+      assignments.forEach((a) => {
+        next[a.id] = { name: a.category, brickCode: a.brickCode }
       })
-      addCoverage(activeCode, assignments.length)
-    }
+      return next
+    })
+    addCoverage(activeCode, assignments.length)
     // Carry the freshly assigned categories into the enrichment scope.
     setEnrichmentProductScope((prev) =>
       prev
@@ -250,6 +257,11 @@ export default function Home() {
           })
         : prev
     )
+  }
+
+  // Assignments done, continue into attribute enrichment.
+  const handleScopedAssignments = (assignments: CategoryAssignment[]) => {
+    applyScopedAssignments(assignments)
     setAssignmentProducts(null)
     setScreen("ai-enrichment-review")
   }
@@ -554,6 +566,26 @@ export default function Home() {
           />
         )
       })()}
+
+      {screen === "product-category-assignment" && categorizableProducts && (
+        <ScreenProductCategoryAssignment
+          code={drillDownCode}
+          codeDescription={drillDownCodeMeta?.description ?? ""}
+          products={categorizableProducts}
+          categoryOptions={isSleepwearFlow ? SLEEPWEAR_CATEGORY_OPTIONS : ALL_CATEGORY_OPTIONS}
+          allowedBrickCodes={getBricksForSelectionCode(activeCode)}
+          onBack={() => setScreen("product-list")}
+          onConfirm={(assignments) => {
+            setCategorizableProducts(null)
+            handleScopedAssignments(assignments)
+          }}
+          onSaveAndExit={(assignments) => {
+            applyScopedAssignments(assignments)
+            setCategorizableProducts(null)
+            setScreen("product-list")
+          }}
+        />
+      )}
 
       {screen === "individual-assignment" && (
         <ScreenIndividualAssignment
