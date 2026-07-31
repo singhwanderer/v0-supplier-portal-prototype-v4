@@ -10,6 +10,8 @@ import {
   type AttributeDef,
 } from "@/lib/category-attributes"
 import { getCodeListValues } from "@/lib/gs1-code-lists"
+import { buildEnrichmentResults, type ProductEnrichmentResult } from "@/lib/enrichment-results"
+import { AttributeValueCombobox } from "@/components/attribute-value-combobox"
 
 // Attribute enrichment review for Selection Code 002 (Sleepwear).
 //
@@ -25,118 +27,6 @@ import { getCodeListValues } from "@/lib/gs1-code-lists"
 //   · when the caller passes the products in scope, review rows carry the real
 //     product and GTIN identities the user just drilled into
 
-// ── Inline value editor ───────────────────────────────────────────────────────
-
-function AttributeValueCombobox({
-  attributeName,
-  codeList,
-  value,
-  onChange,
-  onSave,
-  onCancel,
-}: {
-  attributeName: string
-  codeList?: string
-  value: string
-  onChange: (v: string) => void
-  onSave: () => void
-  onCancel: () => void
-}) {
-  const options = getCodeListValues(codeList)
-  const hasCodeList = options.length > 0
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState(value)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    setQuery(value)
-  }, [value])
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [open])
-
-  const filtered = useMemo(() => {
-    if (!query.trim()) return options
-    const q = query.toLowerCase()
-    return options.filter((o) => o.label.toLowerCase().includes(q) || o.code.toLowerCase().includes(q))
-  }, [options, query])
-
-  return (
-    <div ref={containerRef} className="relative w-full">
-      <div className="flex items-center border border-[#1a5fa6] rounded overflow-hidden bg-white">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            onChange(e.target.value)
-            if (hasCodeList) setOpen(true)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onSave()
-            if (e.key === "Escape") onCancel()
-          }}
-          onFocus={() => hasCodeList && setOpen(true)}
-          className="flex-1 px-2 py-1.5 text-[12px] outline-none bg-transparent"
-          autoFocus
-          placeholder={hasCodeList ? "Type or select from list…" : "Enter value…"}
-          aria-label={`Edit value for ${attributeName}`}
-          aria-expanded={open}
-          aria-haspopup={hasCodeList ? "listbox" : undefined}
-        />
-        {hasCodeList && (
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setOpen((o) => !o)}
-            className="px-1.5 text-[#6b7280] hover:text-[#1a5fa6] transition-colors"
-            aria-label="Toggle dropdown"
-          >
-            <ChevronDown className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-
-      {open && hasCodeList && filtered.length > 0 && (
-        <ul
-          role="listbox"
-          className="absolute z-50 left-0 top-full mt-1 w-full max-h-48 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg text-[12px]"
-        >
-          {filtered.map((opt) => (
-            <li
-              key={opt.code}
-              role="option"
-              aria-selected={value === opt.label}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                setQuery(opt.label)
-                onChange(opt.label)
-                setOpen(false)
-              }}
-              className={`flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#eff6ff] ${
-                value === opt.label ? "bg-[#dbeafe] font-semibold" : ""
-              }`}
-            >
-              <span className="text-[#1a1f2e]">{opt.label}</span>
-              <span className="text-[10px] font-mono text-[#6b7280] ml-2">{opt.code}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {open && hasCodeList && filtered.length === 0 && (
-        <div className="absolute z-50 left-0 top-full mt-1 w-full bg-white border border-[#d1d5db] rounded shadow-lg px-3 py-2 text-[12px] text-[#9ca3af] italic">
-          No matching options — value will be saved as free text
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Data generation ───────────────────────────────────────────────────────────
 
@@ -159,6 +49,8 @@ export interface ScopeProduct {
   id: string
   description: string
   gtins: number
+  /** The product's own GS1 brick, so results can be read back per product. */
+  brickCode?: string
 }
 
 // Deterministic GTIN so a product keeps the same identifier across re-renders.
@@ -253,7 +145,9 @@ interface ScreenSleepwearEnrichmentReviewProps {
   /** e.g. "Step 2 of 2" — rendered beside the attributes-reviewed chip. */
   stepLabel?: string
   onBack: () => void
-  onComplete: (confirmedPercentage: number, codes: string[]) => void
+  onComplete: (confirmedPercentage: number, codes: string[], results: ProductEnrichmentResult[]) => void
+  /** Opens the enrichment detail for one product from the completion screen. */
+  onViewProductEnrichment?: (productId: string) => void
 }
 
 export function ScreenSleepwearEnrichmentReview({
@@ -265,6 +159,7 @@ export function ScreenSleepwearEnrichmentReview({
   stepLabel,
   onBack,
   onComplete,
+  onViewProductEnrichment,
 }: ScreenSleepwearEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Sleepwear" }
@@ -295,6 +190,18 @@ export function ScreenSleepwearEnrichmentReview({
   const [completedAt, setCompletedAt] = useState("")
 
   const attrDefByName = useMemo(() => new Map(attributes.map((a) => [a.name, a])), [attributes])
+
+  // Review rows are keyed by "S22011 — Cotton pajama set"; map that back to the
+  // product's own brick so results carry the category they were enriched under.
+  const brickCodeByProductKey = useMemo(
+    () =>
+      new Map(
+        (scopeProducts ?? [])
+          .filter((p) => p.brickCode)
+          .map((p) => [`${p.id} — ${p.description}`, p.brickCode as string])
+      ),
+    [scopeProducts]
+  )
 
   const toggleProductGtins = (productName: string) => {
     setExpandedProductGtins((prev) => {
@@ -445,6 +352,13 @@ export function ScreenSleepwearEnrichmentReview({
     })
     setProductStates(finalStates)
     setShowConfirmDialog(false)
+    // Hand the decisions upward before they're lost with this screen's state.
+    const results = buildEnrichmentResults(attributeGroups, finalStates, {
+      allAttributeNames: attributes.map((a) => a.name),
+      brickCodeFor: (key) => brickCodeByProductKey.get(key),
+      codeListValueFor: (attribute, value) =>
+        getCodeListValues(attrDefByName.get(attribute)?.codeList).find((v) => v.label === value)?.code,
+    })
     setCompletedAt(
       new Date().toLocaleString("en-US", {
         month: "short",
@@ -455,7 +369,7 @@ export function ScreenSleepwearEnrichmentReview({
       })
     )
     setIsCompleted(true)
-    onComplete(confirmedPercentage, [code])
+    onComplete(confirmedPercentage, [code], results)
   }
 
   // Attributes the user has opened that still hold unreviewed low-confidence rows.
@@ -571,6 +485,35 @@ export function ScreenSleepwearEnrichmentReview({
             <p className="text-[24px] font-bold text-[#1a5fa6] mt-1">{confirmedPercentage}%</p>
           </div>
         </div>
+
+        {/* The run reports totals; this is the route to what it actually wrote
+            for one product — including the attributes it left empty. */}
+        {onViewProductEnrichment && scopeProducts && scopeProducts.length > 0 && (
+          <div className="bg-white border border-[#d1d5db] rounded overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb]">
+              <h3 className="text-[13px] font-semibold text-[#374151]">See what was written per product</h3>
+              <p className="text-[12px] text-[#6b7280] mt-0.5">
+                Values now carried by each product, and which of its category&apos;s attributes are still empty.
+              </p>
+            </div>
+            <ul className="divide-y divide-[#e5e7eb]">
+              {scopeProducts.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
+                  <span className="text-[13px] text-[#374151] min-w-0">
+                    <span className="font-mono text-[#1a1f2e]">{p.id}</span>{" "}
+                    <span className="text-[#6b7280]">{p.description}</span>
+                  </span>
+                  <button
+                    onClick={() => onViewProductEnrichment(p.id)}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1 text-[12px] font-medium text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                  >
+                    View enrichment
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="bg-white border border-[#d1d5db] rounded overflow-hidden">
           <div className="px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb]">

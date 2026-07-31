@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { Sparkles, CheckCircle2, ChevronDown, Info, AlertTriangle, ArrowRight } from "lucide-react"
 import type { CategoryOptionGroup, CategoryAssignment } from "@/components/screen-individual-assignment"
 import { suggestCategory, LOW_CONFIDENCE_THRESHOLD, type CategorySuggestion } from "@/lib/category-suggestion"
+import { PhaseTag } from "@/components/phase-tag"
 
 // AI category assignment for the products in an enrichment scope.
 //
@@ -129,6 +130,7 @@ export function ScreenProductCategoryAssignment({
           </strong>
           {stepLabel && <> &middot; {stepLabel}</>}
         </span>
+        <PhaseTag className="ml-auto" />
       </div>
 
       {/* Header */}

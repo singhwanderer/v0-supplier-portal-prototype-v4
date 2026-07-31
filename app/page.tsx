@@ -31,6 +31,8 @@ import {
 } from "@/components/screen-product-category-assignment"
 import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
 import { getBricksForSelectionCode } from "@/lib/category-attributes"
+import { mergeEnrichmentResults, type ProductEnrichmentResult } from "@/lib/enrichment-results"
+import { ScreenProductEnrichmentDetail } from "@/components/screen-product-enrichment-detail"
 
 export interface ConfirmedCategory {
   id: string
@@ -55,7 +57,7 @@ export interface SelectionCodeMetadata {
   lastEnrichedDate?: string
 }
 
-type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list" | "product-category-assignment"
+type Screen = "upload" | "selection-code-list" | "ai-enrichment-review" | "brick-confirmation" | "brick-gtin-list" | "summary" | "review" | "submission" | "enrichment-preview" | "selection-code" | "category-fallback" | "individual-assignment" | "category-coverage" | "product-list" | "gtin-list" | "product-category-assignment" | "product-enrichment-detail"
 
 // Category assignment upgrades a code that had nothing, but never downgrades one
 // that is already being enriched.
@@ -99,6 +101,12 @@ export default function Home() {
   const [assignmentProducts, setAssignmentProducts] = useState<AssignableProduct[] | null>(null)
   // Uncategorized products awaiting AI's category proposal in the product-level flow
   const [categorizableProducts, setCategorizableProducts] = useState<CategorizableProduct[] | null>(null)
+  // What each enrichment run actually wrote, keyed by the review screen's product
+  // label. Survives the review screen so the detail view can read it back.
+  const [enrichedAttributes, setEnrichedAttributes] = useState<Record<string, ProductEnrichmentResult>>({})
+  // The product whose enrichment detail is open, and which list to return to.
+  const [detailProduct, setDetailProduct] = useState<DrillDownProduct | null>(null)
+  const [detailReturnScreen, setDetailReturnScreen] = useState<"product-list" | "gtin-list">("product-list")
 
   // The code the user is currently working in, whichever path they came through.
   const activeCode = selectedSelectionCodes[0] ?? drillDownCode
@@ -267,7 +275,13 @@ export default function Home() {
   }
 
   // Enrichment finished — update the code (and, for scoped runs, the products).
-  const handleEnrichmentComplete = (confirmedPercentage: number, codes: string[]) => {
+  const handleEnrichmentComplete = (
+    confirmedPercentage: number,
+    codes: string[],
+    results: ProductEnrichmentResult[] = []
+  ) => {
+    // Hold what was actually written so the enrichment detail screen can show it.
+    if (results.length > 0) setEnrichedAttributes((prev) => mergeEnrichmentResults(prev, results))
     const nextStatus: "ai-enriched" | "in-progress" | "needs-enrichment" =
       confirmedPercentage >= 50 ? "ai-enriched"
       : confirmedPercentage > 0 ? "in-progress"
@@ -315,6 +329,16 @@ export default function Home() {
 
   // Where "back" should land depends on whether the user came via a drill-down.
   const backFromEnrichment = () => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")
+
+  // Enrichment results are keyed by the label the review screens build their
+  // rows from, so the detail screen can find a product's run.
+  const enrichmentKeyFor = (p: DrillDownProduct) => `${p.id} — ${p.description}`
+
+  const openEnrichmentDetail = (product: DrillDownProduct) => {
+    setDetailProduct(product)
+    setDetailReturnScreen(screen === "gtin-list" ? "gtin-list" : "product-list")
+    setScreen("product-enrichment-detail")
+  }
 
   const scopeProductCount = enrichmentProductScope?.length ?? 0
   const scopeGtinCount = enrichmentProductScope?.reduce((s, p) => s + p.gtins, 0) ?? 0
@@ -451,6 +475,7 @@ export default function Home() {
             setDrillDownProduct(product)
             setScreen("gtin-list")
           }}
+          onViewEnrichment={openEnrichmentDetail}
           onEnrichProducts={startProductScopedEnrichment}
         />
       )}
@@ -462,7 +487,35 @@ export default function Home() {
           product={drillDownProduct}
           onBack={() => setScreen("product-list")}
           onBackToSelectionCodes={() => setScreen("selection-code-list")}
+          onViewEnrichment={() => openEnrichmentDetail(drillDownProduct)}
           onEnrich={() => startProductScopedEnrichment([drillDownProduct])}
+        />
+      )}
+
+      {screen === "product-enrichment-detail" && detailProduct && (
+        <ScreenProductEnrichmentDetail
+          code={drillDownCode}
+          codeDescription={drillDownCodeMeta?.description ?? ""}
+          product={detailProduct}
+          result={enrichedAttributes[enrichmentKeyFor(detailProduct)]}
+          backLabel={detailReturnScreen === "gtin-list" ? "GTIN List" : "Product List"}
+          onBack={() => setScreen(detailReturnScreen)}
+          onBackToSelectionCodes={() => setScreen("selection-code-list")}
+          onAddValues={(added) => {
+            const key = enrichmentKeyFor(detailProduct)
+            setEnrichedAttributes((prev) =>
+              mergeEnrichmentResults(prev, [
+                {
+                  productKey: key,
+                  productId: detailProduct.id,
+                  description: detailProduct.description,
+                  brickCode: detailProduct.category?.brickCode,
+                  values: added,
+                  unenriched: [],
+                },
+              ])
+            )
+          }}
         />
       )}
 
@@ -476,11 +529,16 @@ export default function Home() {
               id: p.id,
               description: p.description,
               gtins: p.gtins,
+              brickCode: p.category?.brickCode,
             }))}
             brickCodes={scopeBrickCodes}
             stepLabel={stepLabelFor("ai-enrichment-review")}
             onBack={backFromEnrichment}
             onComplete={handleEnrichmentComplete}
+            onViewProductEnrichment={(productId) => {
+              const product = enrichmentProductScope?.find((p) => p.id === productId)
+              if (product) openEnrichmentDetail(product)
+            }}
           />
         ) : (
           <ScreenAIEnrichmentReview
