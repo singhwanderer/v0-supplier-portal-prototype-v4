@@ -34,6 +34,8 @@ interface ScreenProductCategoryAssignmentProps {
   categoryOptions: CategoryOptionGroup[]
   /** Restricts AI to the categories this selection code actually covers. */
   allowedBrickCodes?: string[]
+  /** e.g. "Step 1 of 2" — rendered in the scope banner. */
+  stepLabel?: string
   onBack: () => void
   onConfirm: (assignments: CategoryAssignment[]) => void
   onSaveAndExit?: (assignments: CategoryAssignment[]) => void
@@ -45,6 +47,7 @@ export function ScreenProductCategoryAssignment({
   products,
   categoryOptions,
   allowedBrickCodes,
+  stepLabel,
   onBack,
   onConfirm,
   onSaveAndExit,
@@ -62,6 +65,9 @@ export function ScreenProductCategoryAssignment({
 
   const [rows, setRows] = useState<RowState[]>(initial)
   const [openPicker, setOpenPicker] = useState<string | null>(null)
+  // Snapshot of what was already confirmed before the batch action, so undo
+  // restores exactly that — matching the brick confirmation screen's behaviour.
+  const [preBatchSnapshot, setPreBatchSnapshot] = useState<Set<string> | null>(null)
 
   const confident = rows.filter((r) => r.suggestion && r.suggestion.confidence >= LOW_CONFIDENCE_THRESHOLD)
   const uncertain = rows.filter((r) => r.suggestion && r.suggestion.confidence < LOW_CONFIDENCE_THRESHOLD)
@@ -77,6 +83,8 @@ export function ScreenProductCategoryAssignment({
   const setChosen = (id: string, chosen: RowState["chosen"], overridden: boolean) => {
     setRows((prev) => prev.map((r) => (r.product.id === id ? { ...r, chosen, overridden } : r)))
     setOpenPicker(null)
+    // An individual action supersedes the batch, so batch undo no longer applies.
+    setPreBatchSnapshot(null)
   }
 
   const acceptSuggestion = (row: RowState) => {
@@ -85,6 +93,7 @@ export function ScreenProductCategoryAssignment({
   }
 
   const acceptAllConfident = () => {
+    setPreBatchSnapshot(new Set(rows.filter((r) => r.chosen !== null).map((r) => r.product.id)))
     setRows((prev) =>
       prev.map((r) =>
         r.chosen === null && r.suggestion && r.suggestion.confidence >= LOW_CONFIDENCE_THRESHOLD
@@ -92,6 +101,14 @@ export function ScreenProductCategoryAssignment({
           : r
       )
     )
+  }
+
+  const undoBatch = () => {
+    if (!preBatchSnapshot) return
+    setRows((prev) =>
+      prev.map((r) => (preBatchSnapshot.has(r.product.id) ? r : { ...r, chosen: null, overridden: false }))
+    )
+    setPreBatchSnapshot(null)
   }
 
   const confidenceColor = (c: number) => (c >= 90 ? "#2e7d32" : c >= LOW_CONFIDENCE_THRESHOLD ? "#f59e0b" : "#dc2626")
@@ -109,8 +126,8 @@ export function ScreenProductCategoryAssignment({
           Enriching {rows.length} {rows.length === 1 ? "product" : "products"} in Selection Code{" "}
           <strong>
             {code} {codeDescription}
-          </strong>{" "}
-          &middot; step 1 of 2
+          </strong>
+          {stepLabel && <> &middot; {stepLabel}</>}
         </span>
       </div>
 
@@ -310,7 +327,15 @@ export function ScreenProductCategoryAssignment({
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {pendingConfident.length > 0 && (
+          {preBatchSnapshot ? (
+            <button
+              onClick={undoBatch}
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#fef2f2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dc2626]"
+              style={{ borderColor: "#dc2626", color: "#dc2626" }}
+            >
+              Undo Confirm All
+            </button>
+          ) : pendingConfident.length > 0 ? (
             <button
               onClick={acceptAllConfident}
               className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#f0f2f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
@@ -320,7 +345,7 @@ export function ScreenProductCategoryAssignment({
               Confirm {pendingConfident.length} Confident{" "}
               {pendingConfident.length === 1 ? "Suggestion" : "Suggestions"}
             </button>
-          )}
+          ) : null}
           <div className="text-right">
             <button
               onClick={() => onConfirm(assignments)}

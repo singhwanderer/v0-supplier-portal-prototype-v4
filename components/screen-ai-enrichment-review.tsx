@@ -141,6 +141,8 @@ interface ScreenAIEnrichmentReviewProps {
   scopeLabel?: string
   /** GS1 bricks in scope — decides which attributes are asked for. */
   brickCodes?: string[]
+  /** e.g. "Step 2 of 2" — rendered beside the attributes-reviewed chip. */
+  stepLabel?: string
   onBack: () => void
   onComplete: (confirmedPercentage: number, codes: string[]) => void
 }
@@ -228,7 +230,7 @@ function generateAttributeData(
   })
 }
 
-export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLabel, brickCodes, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
+export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLabel, brickCodes, stepLabel, onBack, onComplete }: ScreenAIEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Selection Code" }
   // Source of truth: use products count from previous screen (e.g., 125 for "Shoes - General Purpose")
@@ -787,6 +789,11 @@ export function ScreenAIEnrichmentReview({ selectedCodes, codesMetadata, scopeLa
             <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#f3f4f6] text-[#6b7280]">
               {reviewedAttributeRows} of {totalAttributeRows} attributes reviewed
             </span>
+            {stepLabel && (
+              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#f3f4f6] text-[#6b7280]">
+                {stepLabel}
+              </span>
+            )}
           </div>
           <p className="text-[13px] text-[#6b7280] mt-1">
             {scopeLabel && <>Enriching <span className="font-semibold text-[#374151]">{scopeLabel}</span> &middot; </>}

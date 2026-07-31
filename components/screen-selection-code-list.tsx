@@ -191,26 +191,31 @@ const handleEnrichSelected = () => {
       {demoRow && (
         <div
           className="flex items-start gap-2.5 px-4 py-3 rounded border-2 text-[13px]"
-          style={{ backgroundColor: "#eff6ff", borderColor: "#1a5fa6", color: "#1e40af" }}
+          style={{ backgroundColor: "#f5f3ff", borderColor: "#7c3aed", color: "#5b21b6" }}
           role="status"
         >
-          <Layers className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#1a5fa6" }} aria-hidden="true" />
+          <span
+            className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white rounded"
+            style={{ backgroundColor: "#7c3aed" }}
+          >
+            DEMO
+          </span>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[#1a1f2e]">
-              Product-level enrichment is available on Selection Code {PRODUCT_LEVEL_DEMO_CODE} only
+            <p className="font-semibold flex items-center gap-1.5" style={{ color: "#5b21b6" }}>
+              <Layers className="w-3.5 h-3.5" aria-hidden="true" />
+              For anyone who wants to see the product-level flow
             </p>
-            <p className="text-[12px] text-[#374151] mt-0.5">
+            <p className="text-[12px] mt-0.5" style={{ color: "#6d28d9" }}>
               {"Open "}
               <strong>{`${PRODUCT_LEVEL_DEMO_CODE} — ${demoRow.description}`}</strong>
-              {` to see its ${demoRow.products} products, then enrich a single product, a selected few, or drill
-                further into a product's GTINs. Every other code enriches at the selection-code level.`
-                .replace(/\s+/g, " ")}
+              {` to enrich a single product, a selected few, or drill into a product's GTINs.
+                This panel is a demo aid, not part of the product.`.replace(/\s+/g, " ")}
             </p>
           </div>
           <button
             onClick={() => onOpenProductList?.(demoRow.code, toMetadata(demoRow))}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-            style={{ backgroundColor: "#1a5fa6" }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c3aed]"
+            style={{ backgroundColor: "#7c3aed" }}
           >
             Open {PRODUCT_LEVEL_DEMO_CODE} Product List
             <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -337,10 +342,11 @@ const handleEnrichSelected = () => {
                 <tr
                   key={row.id}
                   className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors ${
-                    selectedRows.has(row.id) ? "bg-[#eff6ff]" : isProductLevelDemo ? "bg-[#f5f9ff]" : ""
+                    selectedRows.has(row.id) ? "bg-[#eff6ff]" : isProductLevelDemo ? "bg-[#faf9ff]" : ""
                   }`}
                 >
-                  <td className={`px-3 py-2 ${isProductLevelDemo ? "border-l-[3px] border-l-[#1a5fa6]" : ""}`}>
+                  {/* Violet accent matches the DEMO callout — signposting, not product state. */}
+                  <td className={`px-3 py-2 ${isProductLevelDemo ? "border-l-[3px] border-l-[#7c3aed]" : ""}`}>
                     <input
                       type="checkbox"
                       checked={selectedRows.has(row.id)}
@@ -366,17 +372,27 @@ const handleEnrichSelected = () => {
                       {isProductLevelDemo && (
                         <span
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded font-sans"
-                          style={{ backgroundColor: "#dbeafe", color: "#1e40af" }}
-                          title="This selection code demonstrates enrichment at the individual product level"
+                          style={{ backgroundColor: "#ede9fe", color: "#5b21b6" }}
+                          title="Demo aid — this selection code shows enrichment at the individual product level"
                         >
                           <Layers className="w-2.5 h-2.5" aria-hidden="true" />
-                          Product-level
+                          Product-level demo
                         </span>
                       )}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-[#374151]">{row.description}</td>
-                  <td className="px-3 py-2 text-right text-[#374151]">{row.products}</td>
+                  {/* Backstop route into product-level enrichment — the count is
+                      where the concept lives, so it opens the product list too. */}
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => onOpenProductList?.(row.code, toMetadata(row))}
+                      className="text-[#1a5fa6] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] rounded"
+                      title={`View and enrich the ${row.products} products in Selection Code ${row.code}`}
+                    >
+                      {row.products}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 text-right text-[#374151]">{row.gtins}</td>
                   <td className="px-3 py-2">
                     {row.categoriesAssigned >= row.products ? (
