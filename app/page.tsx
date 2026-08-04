@@ -224,15 +224,18 @@ export default function Home() {
 
     // Products that already have a category keep it. For anything uncategorized,
     // AI proposes a category first and the user confirms — assigning the category
-    // is part of enrichment, not something the supplier has to do beforehand.
-    const uncategorized = products.filter((p) => p.category === null)
-    if (uncategorized.length === 0) {
+    // is part of enrichment, not something the supplier has to do beforehand. The
+    // assignment screen is shown the full selection (not just the uncategorized
+    // subset) so the already-categorized products stay visible instead of silently
+    // disappearing from the next screen.
+    const hasUncategorized = products.some((p) => p.category === null)
+    if (!hasUncategorized) {
       setCategorizableProducts(null)
       setScreen("ai-enrichment-review")
       return
     }
     setCategorizableProducts(
-      uncategorized.map((p) => ({ id: p.id, description: p.description, gtins: p.gtins }))
+      products.map((p) => ({ id: p.id, description: p.description, gtins: p.gtins, category: p.category }))
     )
     setScreen("product-category-assignment")
   }

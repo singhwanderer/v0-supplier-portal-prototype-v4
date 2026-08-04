@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Sparkles, CheckCircle2, ChevronDown, Info, AlertTriangle, ArrowRight } from "lucide-react"
+import { Sparkles, CheckCircle2, ChevronDown, Info, AlertTriangle, ArrowRight, HelpCircle } from "lucide-react"
 import type { CategoryOptionGroup, CategoryAssignment } from "@/components/screen-individual-assignment"
 import { suggestCategory, LOW_CONFIDENCE_THRESHOLD, type CategorySuggestion } from "@/lib/category-suggestion"
 
@@ -16,6 +16,8 @@ export interface CategorizableProduct {
   id: string
   description: string
   gtins: number
+  /** Products that already have a category are shown read-only, not run through AI assignment. */
+  category?: { name: string; brickCode: string } | null
 }
 
 interface RowState {
@@ -49,15 +51,21 @@ export function ScreenProductCategoryAssignment({
   onConfirm,
   onSaveAndExit,
 }: ScreenProductCategoryAssignmentProps) {
+  // Already-categorized products keep what they have — only uncategorized ones
+  // go through AI suggestion. Both are shown, so a mixed selection is never silently
+  // narrowed down to just the products that needed AI's help.
+  const alreadyCategorized = products.filter((p) => p.category)
+  const toAssign = products.filter((p) => !p.category)
+
   const initial = useMemo<RowState[]>(
     () =>
-      products.map((product) => ({
+      toAssign.map((product) => ({
         product,
         suggestion: suggestCategory(product.description, allowedBrickCodes),
         chosen: null,
         overridden: false,
       })),
-    [products, allowedBrickCodes]
+    [toAssign, allowedBrickCodes]
   )
 
   const [rows, setRows] = useState<RowState[]>(initial)
@@ -106,7 +114,7 @@ export function ScreenProductCategoryAssignment({
       >
         <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
         <span>
-          Enriching {rows.length} {rows.length === 1 ? "product" : "products"} in Selection Code{" "}
+          Enriching {products.length} {products.length === 1 ? "product" : "products"} in Selection Code{" "}
           <strong>
             {code} {codeDescription}
           </strong>{" "}
@@ -136,158 +144,85 @@ export function ScreenProductCategoryAssignment({
         </div>
       </div>
 
-      {(uncertain.length > 0 || unclassified.length > 0) && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded border border-[#fcd34d] bg-[#fffbeb] text-[12px] text-[#92400e]">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-          <span>
-            {uncertain.length > 0 && (
-              <>
-                {uncertain.length} {uncertain.length === 1 ? "suggestion needs" : "suggestions need"} a closer look
-                {unclassified.length > 0 ? " and " : "."}
-              </>
-            )}
-            {unclassified.length > 0 && (
-              <>
-                {unclassified.length} {unclassified.length === 1 ? "product" : "products"} couldn&apos;t be classified —
-                choose a category for {unclassified.length === 1 ? "it" : "them"} below.
-              </>
-            )}
-          </span>
+      {/* Already-categorized products in this selection — kept as-is, shown for transparency */}
+      {alreadyCategorized.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-[13px] font-semibold text-[#374151]">
+            Already categorized — kept as they are ({alreadyCategorized.length})
+          </h3>
+          <div className="grid gap-2">
+            {alreadyCategorized.map((product) => (
+              <div
+                key={product.id}
+                className="rounded border border-[#d1d5db] bg-[#f9fafb] p-3 flex items-center justify-between gap-4 flex-wrap"
+              >
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <span className="font-mono text-[13px] text-[#1a5fa6]">{product.id}</span>
+                  <span className="text-[13px] text-[#374151]">{product.description}</span>
+                  <span className="text-[12px] text-[#9ca3af]">({product.gtins} GTINs)</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#2e7d32]" aria-hidden="true" />
+                  <span className="text-[13px] font-medium text-[#166534]">{product.category!.name}</span>
+                  <span className="text-[10px] font-mono text-[#9ca3af]">{product.category!.brickCode}</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Products */}
-      <div className="bg-white border border-[#d1d5db] rounded overflow-visible">
-        <table className="w-full text-[13px]">
-          <thead className="bg-[#f7f8fa] border-b border-[#d1d5db]">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold text-[#374151]">Product</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#374151]">Description</th>
-              <th className="px-3 py-2 text-right font-semibold text-[#374151] w-16">GTINs</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#374151] w-[30%]">AI Suggested Category</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#374151] w-56">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const { product, suggestion, chosen, overridden } = row
-              const isPickerOpen = openPicker === product.id
-              const isLow = suggestion !== null && suggestion.confidence < LOW_CONFIDENCE_THRESHOLD
+      {/* AI-suggested categories — one card per product, styled like the Selection Code
+          001 category-confirmation cards (border, confidence bar, Confirm/Undo actions). */}
+      {confident.length > 0 && (
+        <div className="grid gap-3">
+          {confident.map((row) => (
+            <ProductCategoryCard
+              key={row.product.id}
+              row={row}
+              openPicker={openPicker}
+              categoryOptions={categoryOptions}
+              confidenceColor={confidenceColor}
+              onAcceptSuggestion={acceptSuggestion}
+              onOpenPicker={setOpenPicker}
+              onSetChosen={setChosen}
+            />
+          ))}
+        </div>
+      )}
 
-              return (
-                <tr
-                  key={product.id}
-                  className={`border-b border-[#e5e7eb] last:border-b-0 ${chosen ? "bg-[#f0fdf4]" : isLow || !suggestion ? "bg-[#fffbeb]" : "bg-white"}`}
-                >
-                  <td className="px-3 py-2.5 font-mono text-[#1a5fa6]">{product.id}</td>
-                  <td className="px-3 py-2.5 text-[#374151]">{product.description}</td>
-                  <td className="px-3 py-2.5 text-right text-[#6b7280]">{product.gtins}</td>
-
-                  <td className="px-3 py-2.5">
-                    {chosen ? (
-                      <span className="inline-flex items-center gap-1.5 flex-wrap">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#2e7d32]" aria-hidden="true" />
-                        <span className="text-[#166534] font-medium">{chosen.name}</span>
-                        <span className="text-[10px] font-mono text-[#9ca3af]">{chosen.brickCode}</span>
-                        {overridden && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e5e7eb] text-[#6b7280]">
-                            You changed this
-                          </span>
-                        )}
-                      </span>
-                    ) : suggestion ? (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center gap-1.5 flex-wrap">
-                          <Sparkles className="w-3.5 h-3.5 text-[#1a5fa6]" aria-hidden="true" />
-                          <span className="font-medium text-[#1a1f2e]">{suggestion.name}</span>
-                          <span className="text-[10px] font-mono text-[#9ca3af]">{suggestion.brickCode}</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${suggestion.confidence}%`,
-                                backgroundColor: confidenceColor(suggestion.confidence),
-                              }}
-                            />
-                          </div>
-                          <span className="text-[11px]" style={{ color: confidenceColor(suggestion.confidence) }}>
-                            {suggestion.confidence}%
-                          </span>
-                          {isLow && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#fed7aa] text-[#b45309] font-medium">
-                              Needs review
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-[#6b7280] italic">{suggestion.reasoning}</p>
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-[#dc2626]" aria-hidden="true" />
-                        <span className="text-[12px] text-[#dc2626] font-medium">Could not classify</span>
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-3 py-2.5 relative">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {chosen ? (
-                        <button
-                          onClick={() => setChosen(product.id, null, false)}
-                          className="px-2.5 py-1 text-[11px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
-                        >
-                          Undo
-                        </button>
-                      ) : (
-                        <>
-                          {suggestion && (
-                            <button
-                              onClick={() => acceptSuggestion(row)}
-                              className="px-2.5 py-1 text-[11px] font-semibold text-white rounded bg-[#2e7d32] hover:bg-[#1b5e20] transition-colors"
-                            >
-                              Confirm
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setOpenPicker(isPickerOpen ? null : product.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium border border-[#1a5fa6] text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
-                          >
-                            {suggestion ? "Change" : "Choose category"}
-                            <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {isPickerOpen && (
-                      <div className="absolute z-50 top-full right-3 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg">
-                        {categoryOptions.map((group) => (
-                          <div key={group.parent}>
-                            <div className="px-2 py-1.5 text-[10px] font-bold text-[#6b7280] uppercase tracking-wide bg-[#f9fafb]">
-                              {group.parent}
-                            </div>
-                            {group.children.map((cat) => (
-                              <button
-                                key={cat.brickCode}
-                                onClick={() => setChosen(product.id, { name: cat.name, brickCode: cat.brickCode }, true)}
-                                className="w-full px-3 py-1.5 text-left text-[12px] text-[#374151] hover:bg-[#eff6ff] hover:text-[#1a5fa6]"
-                              >
-                                {cat.name}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      {(uncertain.length > 0 || unclassified.length > 0) && (
+        <div className="rounded-lg border-2 border-dashed border-[#f59e0b] bg-[#fffbeb] p-4 space-y-4">
+          <div className="flex items-start gap-2">
+            <HelpCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
+                Help us confirm the product type — {uncertain.length + unclassified.length}{" "}
+                {uncertain.length + unclassified.length === 1 ? "product" : "products"} remaining
+              </h3>
+              <p className="text-[12px] text-[#6b7280] mt-1">
+                We grouped these by our best guess, or couldn&apos;t classify them at all. Confirm if correct, or choose
+                a category yourself.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            {[...uncertain, ...unclassified].map((row) => (
+              <ProductCategoryCard
+                key={row.product.id}
+                row={row}
+                openPicker={openPicker}
+                categoryOptions={categoryOptions}
+                confidenceColor={confidenceColor}
+                onAcceptSuggestion={acceptSuggestion}
+                onOpenPicker={setOpenPicker}
+                onSetChosen={setChosen}
+                lowConfidence
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#d1d5db] flex-wrap">
@@ -337,6 +272,150 @@ export function ScreenProductCategoryAssignment({
               </p>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// One product's category card — styled to match ScreenBrickConfirmation's category
+// cards (border/padding, confidence bar with the same color thresholds, Confirm/Undo
+// button treatment) so the product-flow's category step reads consistently with
+// Selection Code 001's, despite proposing categories per-product instead of per-group.
+interface ProductCategoryCardProps {
+  row: RowState
+  openPicker: string | null
+  categoryOptions: CategoryOptionGroup[]
+  confidenceColor: (c: number) => string
+  onAcceptSuggestion: (row: RowState) => void
+  onOpenPicker: (id: string | null) => void
+  onSetChosen: (id: string, chosen: RowState["chosen"], overridden: boolean) => void
+  lowConfidence?: boolean
+}
+
+function ProductCategoryCard({
+  row,
+  openPicker,
+  categoryOptions,
+  confidenceColor,
+  onAcceptSuggestion,
+  onOpenPicker,
+  onSetChosen,
+  lowConfidence = false,
+}: ProductCategoryCardProps) {
+  const { product, suggestion, chosen, overridden } = row
+  const isPickerOpen = openPicker === product.id
+
+  return (
+    <div
+      className={`rounded border p-4 bg-white transition-colors ${
+        chosen ? "border-[#2e7d32] bg-[#f0fdf4]" : lowConfidence ? "border-[#fcd34d]" : "border-[#d1d5db]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{product.id}</h3>
+            <span className="text-[13px] text-[#6b7280]">{product.description}</span>
+            <span className="text-[12px] text-[#9ca3af]">({product.gtins} GTINs)</span>
+            {chosen && (
+              <span className="flex items-center gap-1 text-[12px] text-[#2e7d32] font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                Confirmed
+              </span>
+            )}
+          </div>
+
+          {chosen ? (
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="text-[13px] font-medium text-[#166534]">{chosen.name}</span>
+              <span className="text-[10px] font-mono text-[#9ca3af]">{chosen.brickCode}</span>
+              {overridden && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e5e7eb] text-[#6b7280]">You changed this</span>
+              )}
+            </div>
+          ) : suggestion ? (
+            <>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <Sparkles className="w-3.5 h-3.5 text-[#1a5fa6]" aria-hidden="true" />
+                <span className="text-[13px] font-medium text-[#1a1f2e]">{suggestion.name}</span>
+                <span className="text-[10px] font-mono text-[#9ca3af]">{suggestion.brickCode}</span>
+                {lowConfidence && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#fed7aa] text-[#b45309] font-medium">
+                    Needs review
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[12px] text-[#6b7280] w-20">Confidence:</span>
+                <div className="flex-1 max-w-xs h-2 rounded-full bg-[#e8eaed] overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${suggestion.confidence}%`, backgroundColor: confidenceColor(suggestion.confidence) }}
+                  />
+                </div>
+                <span className="text-[12px] font-medium text-[#374151] w-10">{suggestion.confidence}%</span>
+              </div>
+              <p className="text-[11px] text-[#6b7280] mt-1.5 italic">{suggestion.reasoning}</p>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 mt-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-[#dc2626]" aria-hidden="true" />
+              <span className="text-[12px] text-[#dc2626] font-medium">Could not classify</span>
+            </div>
+          )}
+        </div>
+
+        <div className="relative flex items-center gap-2 shrink-0 flex-wrap">
+          {chosen ? (
+            <button
+              onClick={() => onSetChosen(product.id, null, false)}
+              className="px-2.5 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6b7280]"
+              title="Undo category confirmation"
+            >
+              Undo Confirm
+            </button>
+          ) : (
+            <>
+              {suggestion && (
+                <button
+                  onClick={() => onAcceptSuggestion(row)}
+                  className="px-3 py-1.5 text-[12px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                  style={{ backgroundColor: "#1a5fa6" }}
+                >
+                  Confirm Category
+                </button>
+              )}
+              <button
+                onClick={() => onOpenPicker(isPickerOpen ? null : product.id)}
+                className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium border border-[#1a5fa6] text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
+              >
+                {suggestion ? "Change" : "Choose Category"}
+                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </>
+          )}
+
+          {isPickerOpen && (
+            <div className="absolute z-50 top-full right-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg">
+              {categoryOptions.map((group) => (
+                <div key={group.parent}>
+                  <div className="px-2 py-1.5 text-[10px] font-bold text-[#6b7280] uppercase tracking-wide bg-[#f9fafb]">
+                    {group.parent}
+                  </div>
+                  {group.children.map((cat) => (
+                    <button
+                      key={cat.brickCode}
+                      onClick={() => onSetChosen(product.id, { name: cat.name, brickCode: cat.brickCode }, true)}
+                      className="w-full px-3 py-1.5 text-left text-[12px] text-[#374151] hover:bg-[#eff6ff] hover:text-[#1a5fa6]"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

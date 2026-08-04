@@ -2,6 +2,8 @@
 
 import { Sparkles, Copy } from "lucide-react"
 import type { DrillDownProduct } from "@/components/screen-product-list"
+import { DatePicker } from "@/components/ui/date-picker"
+import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
 
 // Scenario 2: TGC-style GTIN List drill-down (Product List → GTIN List).
 // Single header-level "Enrich Attributes with AI" CTA for the whole product;
@@ -64,6 +66,9 @@ interface ScreenGtinListProps {
 export function ScreenGtinList({ code, codeDescription, product, onBack, onBackToSelectionCodes, onEnrich }: ScreenGtinListProps) {
   const rows = GTINS_BY_PRODUCT[product.id] ?? buildFallbackGtins(product)
   const hasCategory = product.category !== null
+  const cutoffDate = getEnrichmentCutoffDate()
+  const eligible = isEligibleForEnrichment(product.createDate)
+  const ineligibleTitle = `${product.id} was created before ${cutoffDate.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })} and can't be enriched`
 
   return (
     <div className="space-y-4">
@@ -114,20 +119,28 @@ export function ScreenGtinList({ code, codeDescription, product, onBack, onBackT
             </dd>
             <dt className="text-[#374151]">Total GTINs</dt>
             <dd className="font-semibold text-[#1a1f2e]">{rows.length}</dd>
+            <dt className="text-[#374151]">Enrichment eligible from</dt>
+            <dd>
+              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" />
+            </dd>
           </dl>
           <div className="shrink-0">
             <button
               onClick={onEnrich}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+              disabled={!eligible}
+              title={!eligible ? ineligibleTitle : undefined}
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: "#1a5fa6" }}
             >
               <Sparkles className="w-4 h-4" aria-hidden="true" />
               Enrich Attributes with AI
             </button>
             <p className="text-[11px] text-[#6b7280] mt-1.5 max-w-[240px]">
-              {hasCategory
-                ? `AI will suggest attribute values for all ${rows.length} GTINs of this product — you review before anything is saved.`
-                : `AI will suggest a category for this product, then attribute values for all ${rows.length} GTINs — you review before anything is saved.`}
+              {!eligible
+                ? ineligibleTitle
+                : hasCategory
+                  ? `AI will suggest attribute values for all ${rows.length} GTINs of this product — you review before anything is saved.`
+                  : `AI will suggest a category for this product, then attribute values for all ${rows.length} GTINs — you review before anything is saved.`}
             </p>
           </div>
         </div>
