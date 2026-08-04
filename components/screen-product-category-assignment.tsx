@@ -75,7 +75,9 @@ export function ScreenProductCategoryAssignment({
   const uncertain = rows.filter((r) => r.suggestion && r.suggestion.confidence < LOW_CONFIDENCE_THRESHOLD)
   const unclassified = rows.filter((r) => !r.suggestion)
   const resolved = rows.filter((r) => r.chosen !== null)
-  const allResolved = resolved.length === rows.length && rows.length > 0
+  // Vacuously true when rows.length is 0 — nothing needed an AI category, so
+  // there's nothing outstanding and the supplier should be able to continue.
+  const allResolved = resolved.length === rows.length
   const pendingConfident = confident.filter((r) => r.chosen === null)
 
   const assignments: CategoryAssignment[] = rows
@@ -126,22 +128,28 @@ export function ScreenProductCategoryAssignment({
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-[16px] font-semibold text-[#1a1f2e]">
-            {unclassified.length === rows.length
-              ? `Pick a category for ${rows.length} ${rows.length === 1 ? "product" : "products"}`
-              : unclassified.length === 0
-                ? `AI suggested a category for ${rows.length === 1 ? "this product" : `all ${rows.length} products`}`
-                : `AI suggested a category for ${confident.length + uncertain.length} of ${rows.length} products`}
+            {rows.length === 0
+              ? `${alreadyCategorized.length} ${alreadyCategorized.length === 1 ? "product" : "products"} already categorized — ready for attribute enrichment`
+              : unclassified.length === rows.length
+                ? `Pick a category for ${rows.length} ${rows.length === 1 ? "product" : "products"}`
+                : unclassified.length === 0
+                  ? `AI suggested a category for ${rows.length === 1 ? "this product" : `all ${rows.length} products`}`
+                  : `AI suggested a category for ${confident.length + uncertain.length} of ${rows.length} products`}
           </h2>
           <p className="text-[13px] text-[#6b7280] mt-1 max-w-2xl">
-            Category assignment is part of enrichment — AI proposes one from the product description and you confirm.
-            Change any suggestion, or pick one yourself where AI couldn&apos;t tell. Attribute enrichment follows.
+            {rows.length === 0
+              ? "These products already have a category — continue to attribute enrichment below."
+              : <>Category assignment is part of enrichment — AI proposes one from the product description and you confirm.
+                 Change any suggestion, or pick one yourself where AI couldn&apos;t tell. Attribute enrichment follows.</>}
           </p>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-[13px] font-medium text-[#374151]">
-            {resolved.length} of {rows.length} confirmed
-          </p>
-        </div>
+        {rows.length > 0 && (
+          <div className="text-right shrink-0">
+            <p className="text-[13px] font-medium text-[#374151]">
+              {resolved.length} of {rows.length} confirmed
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Already-categorized products in this selection — kept as-is, shown for transparency */}
@@ -207,7 +215,7 @@ export function ScreenProductCategoryAssignment({
             </div>
           </div>
           <div className="grid gap-3">
-            {[...uncertain, ...unclassified].map((row) => (
+            {uncertain.map((row) => (
               <ProductCategoryCard
                 key={row.product.id}
                 row={row}
@@ -218,6 +226,16 @@ export function ScreenProductCategoryAssignment({
                 onOpenPicker={setOpenPicker}
                 onSetChosen={setChosen}
                 lowConfidence
+              />
+            ))}
+            {unclassified.map((row) => (
+              <UnclassifiedProductCard
+                key={row.product.id}
+                row={row}
+                openPicker={openPicker}
+                categoryOptions={categoryOptions}
+                onOpenPicker={setOpenPicker}
+                onSetChosen={setChosen}
               />
             ))}
           </div>
@@ -334,35 +352,31 @@ function ProductCategoryCard({
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e5e7eb] text-[#6b7280]">You changed this</span>
               )}
             </div>
-          ) : suggestion ? (
-            <>
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <Sparkles className="w-3.5 h-3.5 text-[#1a5fa6]" aria-hidden="true" />
-                <span className="text-[13px] font-medium text-[#1a1f2e]">{suggestion.name}</span>
-                <span className="text-[10px] font-mono text-[#9ca3af]">{suggestion.brickCode}</span>
-                {lowConfidence && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#fed7aa] text-[#b45309] font-medium">
-                    Needs review
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[12px] text-[#6b7280] w-20">Confidence:</span>
-                <div className="flex-1 max-w-xs h-2 rounded-full bg-[#e8eaed] overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${suggestion.confidence}%`, backgroundColor: confidenceColor(suggestion.confidence) }}
-                  />
-                </div>
-                <span className="text-[12px] font-medium text-[#374151] w-10">{suggestion.confidence}%</span>
-              </div>
-              <p className="text-[11px] text-[#6b7280] mt-1.5 italic">{suggestion.reasoning}</p>
-            </>
           ) : (
-            <div className="flex items-center gap-1.5 mt-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-[#dc2626]" aria-hidden="true" />
-              <span className="text-[12px] text-[#dc2626] font-medium">Could not classify</span>
-            </div>
+            suggestion && (
+              <>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <Sparkles className="w-3.5 h-3.5 text-[#1a5fa6]" aria-hidden="true" />
+                  <span className="text-[13px] font-medium text-[#1a1f2e]">{suggestion.name}</span>
+                  <span className="text-[10px] font-mono text-[#9ca3af]">{suggestion.brickCode}</span>
+                  {lowConfidence && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#fed7aa] text-[#b45309] font-medium">
+                      Needs review
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[12px] text-[#6b7280] w-20">Confidence:</span>
+                  <div className="flex-1 max-w-xs h-2 rounded-full bg-[#e8eaed] overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${suggestion.confidence}%`, backgroundColor: confidenceColor(suggestion.confidence) }}
+                    />
+                  </div>
+                  <span className="text-[12px] font-medium text-[#374151] w-10">{suggestion.confidence}%</span>
+                </div>
+              </>
+            )
           )}
         </div>
 
@@ -388,14 +402,112 @@ function ProductCategoryCard({
               )}
               <button
                 onClick={() => onOpenPicker(isPickerOpen ? null : product.id)}
-                className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium border border-[#1a5fa6] text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
               >
-                {suggestion ? "Change" : "Choose Category"}
+                Change
                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </>
           )}
 
+          {isPickerOpen && (
+            <div className="absolute z-50 top-full right-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg">
+              {categoryOptions.map((group) => (
+                <div key={group.parent}>
+                  <div className="px-2 py-1.5 text-[10px] font-bold text-[#6b7280] uppercase tracking-wide bg-[#f9fafb]">
+                    {group.parent}
+                  </div>
+                  {group.children.map((cat) => (
+                    <button
+                      key={cat.brickCode}
+                      onClick={() => onSetChosen(product.id, { name: cat.name, brickCode: cat.brickCode }, true)}
+                      className="w-full px-3 py-1.5 text-left text-[12px] text-[#374151] hover:bg-[#eff6ff] hover:text-[#1a5fa6]"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// A product AI couldn't classify at all — styled to match ScreenBrickConfirmation's
+// red dashed "Could not classify" card exactly, distinct from the amber low-confidence
+// cards above. Once the supplier picks a category it flips to the same confirmed
+// (green) treatment ProductCategoryCard uses.
+interface UnclassifiedProductCardProps {
+  row: RowState
+  openPicker: string | null
+  categoryOptions: CategoryOptionGroup[]
+  onOpenPicker: (id: string | null) => void
+  onSetChosen: (id: string, chosen: RowState["chosen"], overridden: boolean) => void
+}
+
+function UnclassifiedProductCard({ row, openPicker, categoryOptions, onOpenPicker, onSetChosen }: UnclassifiedProductCardProps) {
+  const { product, chosen, overridden } = row
+  const isPickerOpen = openPicker === product.id
+
+  if (chosen) {
+    return (
+      <div className="rounded border p-4 bg-[#f0fdf4] border-[#2e7d32] transition-colors">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{product.id}</h3>
+              <span className="text-[13px] text-[#6b7280]">{product.description}</span>
+              <span className="text-[12px] text-[#9ca3af]">({product.gtins} GTINs)</span>
+              <span className="flex items-center gap-1 text-[12px] text-[#2e7d32] font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                Confirmed
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="text-[13px] font-medium text-[#166534]">{chosen.name}</span>
+              <span className="text-[10px] font-mono text-[#9ca3af]">{chosen.brickCode}</span>
+              {overridden && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e5e7eb] text-[#6b7280]">You changed this</span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => onSetChosen(product.id, null, false)}
+            className="px-2.5 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6b7280]"
+            title="Undo category confirmation"
+          >
+            Undo Confirm
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded border-2 border-[#dc2626] border-dashed p-4 bg-[#fef2f2]">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <AlertTriangle className="w-4 h-4 text-[#dc2626]" aria-hidden="true" />
+            <h3 className="text-[14px] font-semibold text-[#1a1f2e]">{product.id}</h3>
+            <span className="text-[13px] text-[#6b7280]">{product.description}</span>
+            <span className="text-[12px] text-[#9ca3af]">({product.gtins} GTINs)</span>
+          </div>
+          <p className="text-[12px] text-[#6b7280] mt-1">
+            This product could not be automatically categorized. Please assign it individually.
+          </p>
+        </div>
+        <div className="relative shrink-0">
+          <button
+            onClick={() => onOpenPicker(isPickerOpen ? null : product.id)}
+            className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors"
+          >
+            Choose Category
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
           {isPickerOpen && (
             <div className="absolute z-50 top-full right-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-[#d1d5db] rounded shadow-lg">
               {categoryOptions.map((group) => (

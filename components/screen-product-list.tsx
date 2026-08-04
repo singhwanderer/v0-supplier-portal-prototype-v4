@@ -39,7 +39,7 @@ const PRODUCTS_BY_CODE: Record<string, ProductRow[]> = {
     { id: "S22031", description: "Lace-trim chemise",                gtins: 5, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 1, status: "needs-enrichment" },
     { id: "S22034", description: "Hooded terry robe",                gtins: 4, category: { name: "Dressing Gowns", brickCode: "10001338" },        createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 2, status: "needs-enrichment" },
     { id: "S22037", description: "Jogger-style lounge pants",        gtins: 5, category: { name: "Sleep Trousers/Shorts", brickCode: "10001341" }, createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 1, status: "needs-enrichment" },
-    { id: "S22041", description: "Silk nightgown collection",        gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
+    { id: "S22041", description: "Silk nightgown collection",        gtins: 2, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
     { id: "S22044", description: "Flannel pajama top",               gtins: 4, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 1, status: "needs-enrichment" },
     { id: "S22047", description: "Satin camisole set",               gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 0, status: "needs-enrichment" },
   ],
