@@ -1,5 +1,9 @@
 "use client"
 
+import { useMemo, useState } from "react"
+import { Sparkles, Copy } from "lucide-react"
+import { DatePicker } from "@/components/ui/date-picker"
+import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
 import { useState } from "react"
 import { Sparkles, Copy, ListChecks } from "lucide-react"
 
@@ -16,10 +20,11 @@ export interface DrillDownProduct {
   description: string
   gtins: number
   category: { name: string; brickCode: string } | null
+  /** Carried through to the GTIN List screen so it can gate enrichment eligibility too. */
+  createDate: string
 }
 
 interface ProductRow extends DrillDownProduct {
-  createDate: string
   lastUpdateDate: string
   images: number
   status: ProductEnrichmentStatus
@@ -38,7 +43,7 @@ const PRODUCTS_BY_CODE: Record<string, ProductRow[]> = {
     { id: "S22031", description: "Lace-trim chemise",                gtins: 5, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "04/07/2021", lastUpdateDate: "09/18/2025", images: 1, status: "needs-enrichment" },
     { id: "S22034", description: "Hooded terry robe",                gtins: 4, category: { name: "Dressing Gowns", brickCode: "10001338" },        createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 2, status: "needs-enrichment" },
     { id: "S22037", description: "Jogger-style lounge pants",        gtins: 5, category: { name: "Sleep Trousers/Shorts", brickCode: "10001341" }, createDate: "04/07/2021", lastUpdateDate: "08/02/2025", images: 1, status: "needs-enrichment" },
-    { id: "S22041", description: "Silk nightgown collection",        gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
+    { id: "S22041", description: "Silk nightgown collection",        gtins: 2, category: { name: "Night Dresses/Shirts", brickCode: "10001339" },  createDate: "05/28/2026", lastUpdateDate: "07/20/2026", images: 1, status: "needs-enrichment" },
     { id: "S22044", description: "Flannel pajama top",               gtins: 4, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 1, status: "needs-enrichment" },
     { id: "S22047", description: "Satin camisole set",               gtins: 2, category: null,                                                    createDate: "05/28/2026", lastUpdateDate: "",           images: 0, status: "needs-enrichment" },
   ],
@@ -81,6 +86,13 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
   }))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // Enrichment can't touch anything created more than a year ago — a fixed cutoff,
+  // not something the picker below adjusts.
+  const cutoffDate = useMemo(() => getEnrichmentCutoffDate(), [])
+  const eligibleRows = rows.filter((r) => isEligibleForEnrichment(r.createDate))
+  const isRowEligible = (row: ProductRow) => isEligibleForEnrichment(row.createDate)
+  const ineligibleTitle = `Products created before ${cutoffDate.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })} can't be enriched`
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -91,7 +103,9 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
   }
 
   const toggleSelectAll = () => {
-    setSelectedIds((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))))
+    setSelectedIds((prev) =>
+      prev.size === eligibleRows.length ? new Set() : new Set(eligibleRows.map((r) => r.id))
+    )
   }
 
   const selectedRows = rows.filter((r) => selectedIds.has(r.id))
@@ -109,7 +123,7 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
 
   const handleBulkEnrich = () => {
     if (selectedRows.length === 0) return
-    onEnrichProducts(selectedRows.map(({ id, description, gtins, category }) => ({ id, description, gtins, category })))
+    onEnrichProducts(selectedRows.map(({ id, description, gtins, category, createDate }) => ({ id, description, gtins, category, createDate })))
   }
 
   const statusBadge = (status: ProductEnrichmentStatus) => {
@@ -177,11 +191,15 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
       {/* Action bar with bulk enrich CTA */}
       <div className="bg-white border border-[#d1d5db] rounded px-4 py-2 space-y-1.5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <button onClick={() => setSelectedIds(new Set())} className="text-[12px] text-[#1a5fa6] hover:underline focus:outline-none">
               Clear Filter
             </button>
             {selectedIds.size > 0 && <span className="text-[12px] text-[#6b7280]">{selectedIds.size} selected</span>}
+            <span className="inline-flex items-center gap-1.5 text-[12px] text-[#6b7280]">
+              Enrichment eligible from
+              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" />
+            </span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -212,10 +230,10 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                 <th className="w-10 px-3 py-2 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedIds.size === rows.length && rows.length > 0}
+                    checked={selectedIds.size === eligibleRows.length && eligibleRows.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 rounded border-[#d1d5db] text-[#1a5fa6] focus:ring-[#1a5fa6]"
-                    aria-label="Select all products"
+                    aria-label="Select all eligible products"
                   />
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Product</th>
@@ -230,24 +248,28 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const eligible = isRowEligible(row)
+                return (
                 <tr
                   key={row.id}
-                  className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors ${selectedIds.has(row.id) ? "bg-[#eff6ff]" : ""}`}
+                  className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors ${selectedIds.has(row.id) ? "bg-[#eff6ff]" : ""} ${!eligible ? "opacity-60" : ""}`}
                 >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(row.id)}
                       onChange={() => toggleSelection(row.id)}
-                      className="w-4 h-4 rounded border-[#d1d5db] text-[#1a5fa6] focus:ring-[#1a5fa6]"
+                      disabled={!eligible}
+                      title={!eligible ? ineligibleTitle : undefined}
+                      className="w-4 h-4 rounded border-[#d1d5db] text-[#1a5fa6] focus:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed"
                       aria-label={`Select ${row.id}`}
                     />
                   </td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center gap-1.5">
                       <button
-                        onClick={() => onOpenGtinList({ id: row.id, description: row.description, gtins: row.gtins, category: row.category })}
+                        onClick={() => onOpenGtinList({ id: row.id, description: row.description, gtins: row.gtins, category: row.category, createDate: row.createDate })}
                         className="font-mono text-[#1a5fa6] hover:underline focus:outline-none"
                         title={`View GTINs for ${row.id}`}
                       >
@@ -275,6 +297,21 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.gtins}</td>
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.images}</td>
                   <td className="px-3 py-2">
+                    <button
+                      onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category, createDate: row.createDate }])}
+                      disabled={!eligible}
+                      title={
+                        !eligible
+                          ? ineligibleTitle
+                          : row.category === null
+                            ? `Enrich ${row.id} with AI — it will suggest a category first`
+                            : `Enrich ${row.id} with AI`
+                      }
+                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                    >
+                      <Sparkles className="w-3 h-3" aria-hidden="true" />
+                      Enrich
+                    </button>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category }])}
@@ -299,7 +336,8 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
