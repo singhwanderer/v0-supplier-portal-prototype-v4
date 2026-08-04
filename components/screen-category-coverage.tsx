@@ -55,9 +55,13 @@ interface ScreenCategoryCoverageProps {
   onAssignWithAI: (unassignedCount: number) => void
   onProceedToEnrichment: (opts: { coveredCount: number; parkedUnassignedCount: number }) => void
   onBack: () => void
+  /** Leave the flow without enriching. Nothing is persisted — this screen is read-only. */
+  onExit?: () => void
+  /** e.g. "Step 1 of 3" — rendered in the scope banner. */
+  stepLabel?: string
 }
 
-export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignWithAI, onProceedToEnrichment, onBack }: ScreenCategoryCoverageProps) {
+export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignWithAI, onProceedToEnrichment, onBack, onExit, stepLabel }: ScreenCategoryCoverageProps) {
   const code = selectedCodes[0] ?? ""
   const meta = codesMetadata[code] ?? { gtins: 0, products: 0, description: "", categoriesAssigned: 0 }
   const totalProducts = selectedCodes.reduce((s, c) => s + (codesMetadata[c]?.products ?? 0), 0)
@@ -99,6 +103,7 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignW
         <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
         <span>
           Reviewing Selection Code <strong>{codeLabel}</strong> &middot; {totalProducts.toLocaleString()} Products ({totalGtins.toLocaleString()} GTINs)
+          {stepLabel && <> &middot; {stepLabel}</>}
         </span>
       </div>
 
@@ -212,12 +217,24 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignW
 
       {/* Bottom action bar */}
       <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#d1d5db] flex-wrap">
-        <button
-          onClick={onBack}
-          className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-        >
-          &#8592; Back
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+          >
+            &#8592; Back
+          </button>
+          {/* Deliberately "Exit", not "Save & Return" — this screen is a read-only
+              summary, so there is nothing pending to persist. */}
+          {onExit && (
+            <button
+              onClick={onExit}
+              className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+            >
+              Exit to Selection Code List
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
           {!allCovered && (
             <p className="flex items-center gap-1.5 text-[12px] text-[#92400e]">
@@ -231,7 +248,7 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignW
             className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             style={{ backgroundColor: "#1a5fa6" }}
           >
-            Proceed to Enrichment ({assignedCount.toLocaleString()} products)
+            Continue to Attribute Enrichment ({assignedCount.toLocaleString()} products)
             <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>

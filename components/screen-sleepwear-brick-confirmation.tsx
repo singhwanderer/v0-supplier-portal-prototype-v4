@@ -26,6 +26,8 @@ interface SleepwearCategory {
   gtinCount: number
   confidence: number
   confirmed: boolean
+  /** Why AI grouped products here — same evidence line the product-level step shows. */
+  evidence: string
 }
 
 interface ScreenSleepwearBrickConfirmationProps {
@@ -35,6 +37,8 @@ interface ScreenSleepwearBrickConfirmationProps {
   coverageScope?: "all" | "unassigned-only"
   /** Labels the subset being categorized, e.g. "Product S22041 — Silk nightgown collection". */
   scopeLabel?: string
+  /** e.g. "Step 2 of 3" — rendered in the scope banner. */
+  stepLabel?: string
   onViewGtins: (categoryId: string, categoryName: string, brickCode: string) => void
   onProceedToEnrichment: (categories: ConfirmedCategory[]) => void
   onBack: () => void
@@ -48,6 +52,7 @@ export function ScreenSleepwearBrickConfirmation({
   sourceContext,
   coverageScope = "all",
   scopeLabel,
+  stepLabel,
   onViewGtins,
   onProceedToEnrichment,
   onBack,
@@ -69,6 +74,7 @@ export function ScreenSleepwearBrickConfirmation({
         gtinCount: estimateGtins(counts[i]),
         confidence: def.confidence,
         confirmed: false,
+        evidence: def.evidence,
       }))
       .filter((c) => c.productCount > 0)
   }, [totalProductCount])
@@ -170,6 +176,7 @@ export function ScreenSleepwearBrickConfirmation({
               {totalGtinCount.toLocaleString()} GTINs)
             </>
           )}
+          {stepLabel && <> &middot; {stepLabel}</>}
         </span>
       </div>
 
@@ -245,6 +252,7 @@ export function ScreenSleepwearBrickConfirmation({
                   </div>
                   <span className="text-[12px] font-medium text-[#374151] w-10">{cat.confidence}%</span>
                 </div>
+                <p className="text-[11px] text-[#6b7280] italic mt-1.5">{cat.evidence}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <button
@@ -332,10 +340,15 @@ export function ScreenSleepwearBrickConfirmation({
                       <span className="text-[13px] text-[#6b7280]">
                         {cat.productCount} {cat.productCount === 1 ? "Product" : "Products"}
                       </span>
-                      {cat.confirmed && (
+                      {cat.confirmed ? (
                         <span className="flex items-center gap-1 text-[12px] text-[#2e7d32] font-medium">
                           <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                           Confirmed
+                        </span>
+                      ) : (
+                        // Same wording the product-level step and both review screens use.
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fed7aa] text-[#b45309]">
+                          Needs review
                         </span>
                       )}
                     </div>
@@ -346,6 +359,7 @@ export function ScreenSleepwearBrickConfirmation({
                       </div>
                       <span className="text-[12px] font-medium text-[#92400e] w-10">{cat.confidence}%</span>
                     </div>
+                    <p className="text-[11px] text-[#6b7280] italic mt-1.5">{cat.evidence}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     <button
@@ -386,6 +400,7 @@ export function ScreenSleepwearBrickConfirmation({
                         {unclassifiableCategory.productCount === 1 ? "Product" : "Products"}
                       </span>
                     </div>
+                    <p className="text-[11px] text-[#6b7280] italic mt-1">{unclassifiableCategory.evidence}</p>
                     <p className="text-[12px] text-[#6b7280] mt-1">
                       These products could not be automatically categorized. Please assign them individually.
                     </p>
@@ -422,7 +437,7 @@ export function ScreenSleepwearBrickConfirmation({
             onClick={onBack}
             className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
           >
-            &#8592; Previous
+            &#8592; Back
           </button>
           <div>
             <button
@@ -470,8 +485,8 @@ export function ScreenSleepwearBrickConfirmation({
               style={{ backgroundColor: "#1a5fa6" }}
             >
               {allConfirmed
-                ? `Proceed with All ${totalCount} Categories (${totalConfirmedProducts.toLocaleString()} ${totalConfirmedProducts === 1 ? "Product" : "Products"})`
-                : `Proceed with ${confirmedCount} Confirmed Categor${confirmedCount === 1 ? "y" : "ies"} (${totalConfirmedProducts.toLocaleString()} ${totalConfirmedProducts === 1 ? "Product" : "Products"})`}
+                ? `Continue to Attribute Enrichment (all ${totalCount} categories, ${totalConfirmedProducts.toLocaleString()} ${totalConfirmedProducts === 1 ? "product" : "products"})`
+                : `Continue to Attribute Enrichment (${confirmedCount} categor${confirmedCount === 1 ? "y" : "ies"}, ${totalConfirmedProducts.toLocaleString()} ${totalConfirmedProducts === 1 ? "product" : "products"})`}
             </button>
           )}
         </div>
