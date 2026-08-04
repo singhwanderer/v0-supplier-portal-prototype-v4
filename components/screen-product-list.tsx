@@ -4,6 +4,10 @@ import { useMemo, useState } from "react"
 import { Sparkles, Copy } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
+import { useState } from "react"
+import { Sparkles, Copy, ListChecks } from "lucide-react"
+
+import { PhaseTag } from "@/components/phase-tag"
 
 // Scenario 2: TGC-style Product List drill-down (Selection Code List → Product List).
 // Mirrors the classic TGC layout (breadcrumb, header info block, filter band, table)
@@ -69,10 +73,11 @@ interface ScreenProductListProps {
   productCategoryUpdates?: Record<string, { name: string; brickCode: string }>
   onBack: () => void
   onOpenGtinList: (product: DrillDownProduct) => void
+  onViewEnrichment: (product: DrillDownProduct) => void
   onEnrichProducts: (products: DrillDownProduct[]) => void
 }
 
-export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, onBack, onOpenGtinList, onEnrichProducts }: ScreenProductListProps) {
+export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, onBack, onOpenGtinList, onViewEnrichment, onEnrichProducts }: ScreenProductListProps) {
   const baseRows = PRODUCTS_BY_CODE[code] ?? buildFallbackRows(code, metadata)
   const rows: ProductRow[] = baseRows.map((row) => ({
     ...row,
@@ -150,6 +155,7 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
         </button>
         <span className="mx-1.5 text-[#9ca3af]">&gt;</span>
         <span className="font-semibold text-[#1a1f2e]">Product List</span>
+        <PhaseTag className="ml-2.5" />
       </nav>
 
       {/* Header info block — TGC-style */}
@@ -306,6 +312,28 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                       <Sparkles className="w-3 h-3" aria-hidden="true" />
                       Enrich
                     </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category }])}
+                        title={
+                          row.category === null
+                            ? `Enrich ${row.id} with AI — it will suggest a category first`
+                            : `Enrich ${row.id} with AI`
+                        }
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                      >
+                        <Sparkles className="w-3 h-3" aria-hidden="true" />
+                        Enrich
+                      </button>
+                      <button
+                        onClick={() => onViewEnrichment({ id: row.id, description: row.description, gtins: row.gtins, category: row.category })}
+                        title={`See which attributes ${row.id} carries, and which are still empty`}
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#374151] border border-[#d1d5db] rounded bg-white hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                      >
+                        <ListChecks className="w-3 h-3" aria-hidden="true" />
+                        View enrichment
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 )

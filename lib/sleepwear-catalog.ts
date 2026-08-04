@@ -22,23 +22,36 @@ export interface SleepwearBrick {
   confidence: number
   /** Share of the in-scope products that fall into this category. */
   weight: number
+  /**
+   * Why AI grouped products here — shown on the card so the code-level step
+   * explains itself the same way the product-level step does. Authored from the
+   * garment nouns lib/category-suggestion.ts matches on, so both tell one story.
+   */
+  evidence: string
 }
 
 // High-confidence groups AI proposes for sleepwear.
 export const SLEEPWEAR_BRICKS: SleepwearBrick[] = [
-  { id: "1", name: "Night Dresses/Shirts",  brickCode: "10001339", confidence: 95, weight: 0.30 },
-  { id: "2", name: "Dressing Gowns",        brickCode: "10001338", confidence: 92, weight: 0.22 },
-  { id: "3", name: "Sleep Trousers/Shorts", brickCode: "10001341", confidence: 94, weight: 0.20 },
+  { id: "1", name: "Night Dresses/Shirts",  brickCode: "10001339", confidence: 95, weight: 0.30,
+    evidence: `"nightgown", "sleep shirt" and "chemise" matched in the product descriptions` },
+  { id: "2", name: "Dressing Gowns",        brickCode: "10001338", confidence: 92, weight: 0.22,
+    evidence: `"robe" and "kimono" matched in the product descriptions` },
+  { id: "3", name: "Sleep Trousers/Shorts", brickCode: "10001341", confidence: 94, weight: 0.20,
+    evidence: `"sleep pant", "sleep short" and "lounge pant" matched in the product descriptions` },
 ]
 
 // The "help us confirm the product type" tier. lc4 is the unclassifiable
 // remainder and must keep confidence 0 / the "Could not classify" name — the
 // confirmation screen keys its red card off both.
 export const SLEEPWEAR_LOW_CONFIDENCE_BRICKS: SleepwearBrick[] = [
-  { id: "lc1", name: "Sleepwear Variety Packs", brickCode: "10001358", confidence: 54, weight: 0.10 },
-  { id: "lc2", name: "Night Dresses/Shirts",    brickCode: "10001339", confidence: 48, weight: 0.08 },
-  { id: "lc3", name: "Dressing Gowns",          brickCode: "10001338", confidence: 45, weight: 0.06 },
-  { id: "lc4", name: "Could not classify",      brickCode: "",         confidence: 0,  weight: 0.04 },
+  { id: "lc1", name: "Sleepwear Variety Packs", brickCode: "10001358", confidence: 54, weight: 0.10,
+    evidence: `Only "set" and "pack" matched — too generic to be sure` },
+  { id: "lc2", name: "Night Dresses/Shirts",    brickCode: "10001339", confidence: 48, weight: 0.08,
+    evidence: `Only "camisole" matched — could also be a variety pack` },
+  { id: "lc3", name: "Dressing Gowns",          brickCode: "10001338", confidence: 45, weight: 0.06,
+    evidence: `Only "wrap" matched — could also be a shawl or a cover-up` },
+  { id: "lc4", name: "Could not classify",      brickCode: "",         confidence: 0,  weight: 0.04,
+    evidence: "No garment type could be read from these product descriptions" },
 ]
 
 // Category picker for individual assignment within the sleepwear flow.
