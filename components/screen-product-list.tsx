@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Sparkles, Copy, ListChecks } from "lucide-react"
+import { useState } from "react"
+import { Sparkles, Copy } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
-import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
+import { getEnrichmentCutoffDate } from "@/lib/date-utils"
 
 import { PhaseTag } from "@/components/phase-tag"
 
@@ -84,11 +84,17 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
   }))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  // Enrichment can't touch anything created more than a year ago — a fixed cutoff,
-  // not something the picker below adjusts.
-  const cutoffDate = useMemo(() => getEnrichmentCutoffDate(), [])
-  const eligibleRows = rows.filter((r) => isEligibleForEnrichment(r.createDate))
-  const isRowEligible = (row: ProductRow) => isEligibleForEnrichment(row.createDate)
+  // Enrichment cutoff — defaults to exactly 1 year ago but the user can adjust it
+  // forward or backward within the allowed range (1 year ago → today).
+  const [cutoffDate, setCutoffDate] = useState<Date>(() => getEnrichmentCutoffDate())
+  const isRowEligible = (row: ProductRow) => {
+    const parsed = row.createDate ? (() => {
+      const [m, d, y] = row.createDate.split("/").map(Number)
+      return new Date(y, m - 1, d)
+    })() : null
+    return parsed !== null && parsed >= cutoffDate
+  }
+  const eligibleRows = rows.filter((r) => isRowEligible(r))
   const ineligibleTitle = `Products created before ${cutoffDate.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })} can't be enriched`
 
   const toggleSelection = (id: string) => {
@@ -196,7 +202,7 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
             {selectedIds.size > 0 && <span className="text-[12px] text-[#6b7280]">{selectedIds.size} selected</span>}
             <span className="inline-flex items-center gap-1.5 text-[12px] text-[#6b7280]">
               Enrichment eligible from
-              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" />
+              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" onChange={setCutoffDate} />
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -310,28 +316,6 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                       <Sparkles className="w-3 h-3" aria-hidden="true" />
                       Enrich
                     </button>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category }])}
-                        title={
-                          row.category === null
-                            ? `Enrich ${row.id} with AI — it will suggest a category first`
-                            : `Enrich ${row.id} with AI`
-                        }
-                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                      >
-                        <Sparkles className="w-3 h-3" aria-hidden="true" />
-                        Enrich
-                      </button>
-                      <button
-                        onClick={() => onViewEnrichment({ id: row.id, description: row.description, gtins: row.gtins, category: row.category })}
-                        title={`See which attributes ${row.id} carries, and which are still empty`}
-                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#374151] border border-[#d1d5db] rounded bg-white hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                      >
-                        <ListChecks className="w-3 h-3" aria-hidden="true" />
-                        View enrichment
-                      </button>
-                    </div>
                   </td>
                 </tr>
                 )
