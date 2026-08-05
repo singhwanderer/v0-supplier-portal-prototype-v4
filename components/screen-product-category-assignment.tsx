@@ -282,25 +282,7 @@ export function ScreenProductCategoryAssignment({
         </div>
 
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          {preBatchSnapshot ? (
-            <button
-              onClick={undoBatch}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#fef2f2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dc2626]"
-              style={{ borderColor: "#dc2626", color: "#dc2626" }}
-            >
-              Undo Confirm All
-            </button>
-          ) : pendingConfident.length > 0 ? (
-            <button
-              onClick={acceptAllConfident}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#f0f2f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-              style={{ borderColor: "#1a1f5e", color: "#1a1f5e" }}
-            >
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              Confirm {pendingConfident.length} Confident{" "}
-              {pendingConfident.length === 1 ? "Suggestion" : "Suggestions"}
-            </button>
-          ) : null}
+
           <div className="text-right">
             <button
               onClick={() => onConfirm(assignments)}
@@ -427,13 +409,7 @@ function ProductCategoryCard({
                   Confirm Category
                 </button>
               )}
-              <button
-                onClick={() => onOpenPicker(isPickerOpen ? null : product.id)}
-                className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors"
-              >
-                Change
-                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
+
             </>
           )}
 

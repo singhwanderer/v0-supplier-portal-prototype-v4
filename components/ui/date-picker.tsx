@@ -1,21 +1,39 @@
 "use client"
 
+import { useState } from "react"
 import { CalendarDays } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
-// Informational date display used for the fixed enrichment-eligibility cutoff on
-// the Product List / GTIN List screens. It shows the date and lets a supplier open
-// the calendar to see it in context — it does not report changes back, since the
-// cutoff itself isn't adjustable.
+// Enrichment eligibility date picker. Allows the user to move the cutoff date
+// forward or backward, but never beyond today (future) or more than one year
+// ago (the hard eligibility limit).
 interface DatePickerProps {
   date: Date
   label?: string
+  onChange?: (date: Date) => void
 }
 
-export function DatePicker({ date, label }: DatePickerProps) {
+export function DatePicker({ date, label, onChange }: DatePickerProps) {
+  const [open, setOpen] = useState(false)
+
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  oneYearAgo.setHours(0, 0, 0, 0)
+
+  const handleSelect = (selected: Date | undefined) => {
+    if (!selected || !onChange) return
+    // Clamp: must be between 1 year ago and today
+    const clamped = selected < oneYearAgo ? oneYearAgo : selected > today ? today : selected
+    onChange(clamped)
+    setOpen(false)
+  }
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -27,7 +45,14 @@ export function DatePicker({ date, label }: DatePickerProps) {
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">
-        <Calendar mode="single" selected={date} defaultMonth={date} disabled />
+        <Calendar
+          mode="single"
+          selected={date}
+          defaultMonth={date}
+          onSelect={handleSelect}
+          disabled={(day) => day > today || day < oneYearAgo}
+          initialFocus
+        />
       </PopoverContent>
     </Popover>
   )

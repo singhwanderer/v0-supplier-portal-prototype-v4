@@ -1,9 +1,10 @@
 "use client"
 
-import { Sparkles, Copy, ListChecks } from "lucide-react"
+import { useState } from "react"
+import { Sparkles, Copy } from "lucide-react"
 import type { DrillDownProduct } from "@/components/screen-product-list"
 import { DatePicker } from "@/components/ui/date-picker"
-import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
+import { getEnrichmentCutoffDate } from "@/lib/date-utils"
 import { PhaseTag } from "@/components/phase-tag"
 
 // Scenario 2: TGC-style GTIN List drill-down (Product List → GTIN List).
@@ -68,8 +69,12 @@ interface ScreenGtinListProps {
 export function ScreenGtinList({ code, codeDescription, product, onBack, onBackToSelectionCodes, onViewEnrichment, onEnrich }: ScreenGtinListProps) {
   const rows = GTINS_BY_PRODUCT[product.id] ?? buildFallbackGtins(product)
   const hasCategory = product.category !== null
-  const cutoffDate = getEnrichmentCutoffDate()
-  const eligible = isEligibleForEnrichment(product.createDate)
+  const [cutoffDate, setCutoffDate] = useState<Date>(() => getEnrichmentCutoffDate())
+  const eligible = (() => {
+    if (!product.createDate) return false
+    const [m, d, y] = product.createDate.split("/").map(Number)
+    return new Date(y, m - 1, d) >= cutoffDate
+  })()
   const ineligibleTitle = `${product.id} was created before ${cutoffDate.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })} and can't be enriched`
 
   return (
@@ -124,7 +129,7 @@ export function ScreenGtinList({ code, codeDescription, product, onBack, onBackT
             <dd className="font-semibold text-[#1a1f2e]">{rows.length}</dd>
             <dt className="text-[#374151]">Enrichment eligible from</dt>
             <dd>
-              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" />
+              <DatePicker date={cutoffDate} label="Enrichment eligibility cutoff" onChange={setCutoffDate} />
             </dd>
           </dl>
           <div className="shrink-0">
@@ -138,24 +143,6 @@ export function ScreenGtinList({ code, codeDescription, product, onBack, onBackT
               <Sparkles className="w-4 h-4" aria-hidden="true" />
               Enrich Attributes with AI
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onEnrich}
-                className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-                style={{ backgroundColor: "#1a5fa6" }}
-              >
-                <Sparkles className="w-4 h-4" aria-hidden="true" />
-                Enrich Attributes with AI
-              </button>
-              <button
-                onClick={onViewEnrichment}
-                title={`See which attributes ${product.id} carries, and which are still empty`}
-                className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#374151] border border-[#d1d5db] rounded bg-white hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-              >
-                <ListChecks className="w-4 h-4" aria-hidden="true" />
-                View enrichment
-              </button>
-            </div>
             <p className="text-[11px] text-[#6b7280] mt-1.5 max-w-[240px]">
               {!eligible
                 ? ineligibleTitle
