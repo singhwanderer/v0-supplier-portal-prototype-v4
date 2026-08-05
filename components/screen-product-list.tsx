@@ -1,11 +1,9 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Sparkles, Copy } from "lucide-react"
+import { Sparkles, Copy, ListChecks } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate, isEligibleForEnrichment } from "@/lib/date-utils"
-import { useState } from "react"
-import { Sparkles, Copy, ListChecks } from "lucide-react"
 
 import { PhaseTag } from "@/components/phase-tag"
 
