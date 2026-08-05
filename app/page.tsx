@@ -140,6 +140,9 @@ export default function Home() {
     screen === "category-coverage"    ? "selection-code-list" :
     screen === "product-list"         ? "selection-code-list" :
     screen === "gtin-list"            ? "selection-code-list" :
+    // The detail screen lives in the drill-down, so it keeps the list's chrome
+    // rather than the enrichment flow's.
+    screen === "product-enrichment-detail" ? "selection-code-list" :
     screen === "ai-enrichment-review" ? "review" :
     screen === "category-fallback"    ? "summary" :
     screen === "brick-confirmation"   ? "summary" :
@@ -472,6 +475,7 @@ export default function Home() {
             setDrillDownProduct(product)
             setScreen("gtin-list")
           }}
+          enrichmentResultFor={(product) => enrichedAttributes[enrichmentKeyFor(product)]}
           onViewEnrichment={openEnrichmentDetail}
           onEnrichProducts={startProductScopedEnrichment}
         />
@@ -482,6 +486,7 @@ export default function Home() {
           code={drillDownCode}
           codeDescription={drillDownCodeMeta?.description ?? ""}
           product={drillDownProduct}
+          enrichmentResult={enrichedAttributes[enrichmentKeyFor(drillDownProduct)]}
           onBack={() => setScreen("product-list")}
           onBackToSelectionCodes={() => setScreen("selection-code-list")}
           onViewEnrichment={() => openEnrichmentDetail(drillDownProduct)}
