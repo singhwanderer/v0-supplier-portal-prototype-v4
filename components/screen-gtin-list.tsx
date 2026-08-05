@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, Copy } from "lucide-react"
+import { Sparkles, Copy, Eye } from "lucide-react"
 import type { DrillDownProduct } from "@/components/screen-product-list"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate } from "@/lib/date-utils"
+import { getAttributesForBrick } from "@/lib/category-attributes"
+import { summarizeEnrichment, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 import { PhaseTag } from "@/components/phase-tag"
 
 // Scenario 2: TGC-style GTIN List drill-down (Product List → GTIN List).
@@ -60,15 +62,23 @@ interface ScreenGtinListProps {
   code: string
   codeDescription: string
   product: DrillDownProduct
+  /** What enrichment wrote for this product, when it has been through a run. */
+  enrichmentResult?: ProductEnrichmentResult
   onBack: () => void
   onBackToSelectionCodes: () => void
   onViewEnrichment: () => void
   onEnrich: () => void
 }
 
-export function ScreenGtinList({ code, codeDescription, product, onBack, onBackToSelectionCodes, onViewEnrichment, onEnrich }: ScreenGtinListProps) {
+export function ScreenGtinList({ code, codeDescription, product, enrichmentResult, onBack, onBackToSelectionCodes, onViewEnrichment, onEnrich }: ScreenGtinListProps) {
   const rows = GTINS_BY_PRODUCT[product.id] ?? buildFallbackGtins(product)
   const hasCategory = product.category !== null
+
+  // Same count the Product List row showed, so drilling in doesn't lose the number.
+  const summary = summarizeEnrichment(
+    enrichmentResult,
+    product.category ? getAttributesForBrick(product.category.brickCode).map((a) => a.name) : []
+  )
   const [cutoffDate, setCutoffDate] = useState<Date>(() => getEnrichmentCutoffDate())
   const eligible = (() => {
     if (!product.createDate) return false
@@ -150,6 +160,25 @@ export function ScreenGtinList({ code, codeDescription, product, onBack, onBackT
                   ? `AI will suggest attribute values for all ${rows.length} GTINs of this product — you review before anything is saved.`
                   : `AI will suggest a category for this product, then attribute values for all ${rows.length} GTINs — you review before anything is saved.`}
             </p>
+            {/* The enrichment outcome is reachable from here too, not only from the
+                completion screen the user sees once and navigates away from. */}
+            {summary.total > 0 && (
+              <button
+                onClick={onViewEnrichment}
+                title={
+                  summary.hasRun
+                    ? `See what enrichment wrote for ${product.id} — ${summary.enriched} of ${summary.total} attributes filled`
+                    : `${product.id} hasn't been enriched yet — see the ${summary.total} attributes its category asks for`
+                }
+                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+              >
+                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                View enrichment
+                <span className="font-normal tabular-nums text-[#6b7280]">
+                  {summary.enriched}/{summary.total}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

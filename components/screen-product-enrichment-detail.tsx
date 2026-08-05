@@ -6,6 +6,7 @@ import { CheckCircle2, AlertCircle, Info, Pencil, Plus, X, Sparkles } from "luci
 import { AttributeValueCombobox } from "@/components/attribute-value-combobox"
 import { getAttributesForBrick, type AttributeDef } from "@/lib/category-attributes"
 import { getCodeListValues } from "@/lib/gs1-code-lists"
+import { summarizeEnrichment, unenrichedAttributesFor } from "@/lib/enrichment-results"
 import type {
   EnrichedAttributeValue,
   ProductEnrichmentResult,
@@ -77,20 +78,16 @@ export function ScreenProductEnrichmentDetail({
   )
 
   const values = result?.values ?? []
-  const enrichedNames = new Set(values.map((v) => v.attribute))
 
   // Anything in the category's attribute set with no value, however it got there.
-  const unenriched: UnenrichedAttribute[] = useMemo(() => {
-    const recorded = (result?.unenriched ?? []).filter((u) => !enrichedNames.has(u.attribute))
-    const seen = new Set(recorded.map((u) => u.attribute))
-    const missing = categoryAttributes
-      .filter((a) => !enrichedNames.has(a.name) && !seen.has(a.name))
-      .map((a): UnenrichedAttribute => ({ attribute: a.name, reason: "no-suggestion" }))
-    return [...recorded, ...missing]
-  }, [result, categoryAttributes, enrichedNames])
-
-  const totalAttributes = values.length + unenriched.length
-  const coverage = totalAttributes > 0 ? Math.round((values.length / totalAttributes) * 100) : 0
+  // Counted by the same helper the Product List uses, so the "7/16" on the row
+  // the user clicked is the "7/16" they land on.
+  const attributeNames = useMemo(() => categoryAttributes.map((a) => a.name), [categoryAttributes])
+  const unenriched: UnenrichedAttribute[] = useMemo(
+    () => unenrichedAttributesFor(result, attributeNames),
+    [result, attributeNames]
+  )
+  const { total: totalAttributes, coverage } = summarizeEnrichment(result, attributeNames)
 
   const handleSaveForm = () => {
     const added: EnrichedAttributeValue[] = Object.entries(draft)

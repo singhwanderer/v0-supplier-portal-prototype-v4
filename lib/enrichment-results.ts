@@ -135,6 +135,48 @@ export function buildEnrichmentResults(
   })
 }
 
+/**
+ * Every attribute the category asks for that still has no value, recorded
+ * reasons first. Shared by the Enrichment Detail screen and the Product List so
+ * the two can't disagree — a row reading "7/16" must open on "7/16".
+ */
+export function unenrichedAttributesFor(
+  result: ProductEnrichmentResult | undefined,
+  categoryAttributeNames: string[]
+): UnenrichedAttribute[] {
+  const enriched = new Set((result?.values ?? []).map((v) => v.attribute))
+  const recorded = (result?.unenriched ?? []).filter((u) => !enriched.has(u.attribute))
+  const seen = new Set(recorded.map((u) => u.attribute))
+  const missing = categoryAttributeNames
+    .filter((name) => !enriched.has(name) && !seen.has(name))
+    .map((name): UnenrichedAttribute => ({ attribute: name, reason: "no-suggestion" }))
+  return [...recorded, ...missing]
+}
+
+export interface EnrichmentSummary {
+  enriched: number
+  /** Size of the category's attribute set — what enrichment could have filled. */
+  total: number
+  coverage: number
+  /** False when the product has never been through a run. */
+  hasRun: boolean
+}
+
+/** One product's enrichment progress, as the Product List column reports it. */
+export function summarizeEnrichment(
+  result: ProductEnrichmentResult | undefined,
+  categoryAttributeNames: string[]
+): EnrichmentSummary {
+  const enriched = result?.values.length ?? 0
+  const total = enriched + unenrichedAttributesFor(result, categoryAttributeNames).length
+  return {
+    enriched,
+    total,
+    coverage: total > 0 ? Math.round((enriched / total) * 100) : 0,
+    hasRun: result !== undefined,
+  }
+}
+
 /** Merge a fresh run over anything already recorded for the same products. */
 export function mergeEnrichmentResults(
   previous: Record<string, ProductEnrichmentResult>,

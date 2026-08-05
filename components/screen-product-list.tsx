@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, Copy } from "lucide-react"
+import { Sparkles, Copy, Eye } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate } from "@/lib/date-utils"
+import { getAttributesForBrick } from "@/lib/category-attributes"
+import { summarizeEnrichment, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 
 import { PhaseTag } from "@/components/phase-tag"
 
@@ -69,13 +71,19 @@ interface ScreenProductListProps {
   productEnrichmentUpdates: Record<string, ProductEnrichmentStatus>
   /** Categories assigned during this session, so newly categorized products stop reading "Not assigned". */
   productCategoryUpdates?: Record<string, { name: string; brickCode: string }>
+  /**
+   * Reads back what an enrichment run wrote for a product. Without it the list
+   * could only show a status badge; with it every row reports how much of its
+   * category is actually filled, and can open the detail behind that number.
+   */
+  enrichmentResultFor?: (product: DrillDownProduct) => ProductEnrichmentResult | undefined
   onBack: () => void
   onOpenGtinList: (product: DrillDownProduct) => void
   onViewEnrichment: (product: DrillDownProduct) => void
   onEnrichProducts: (products: DrillDownProduct[]) => void
 }
 
-export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, onBack, onOpenGtinList, onViewEnrichment, onEnrichProducts }: ScreenProductListProps) {
+export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, enrichmentResultFor, onBack, onOpenGtinList, onViewEnrichment, onEnrichProducts }: ScreenProductListProps) {
   const baseRows = PRODUCTS_BY_CODE[code] ?? buildFallbackRows(code, metadata)
   const rows: ProductRow[] = baseRows.map((row) => ({
     ...row,
@@ -125,9 +133,26 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
       ? `Next: AI will suggest attribute values for the ${selectedRows.length} selected product${selectedRows.length === 1 ? "" : "s"} — you review and confirm before anything is saved.`
       : `Next: AI will suggest a category for ${selectedWithoutCategory} uncategorized product${selectedWithoutCategory === 1 ? "" : "s"} for you to confirm${selectedWithCategory.length > 0 ? ` — the other ${selectedWithCategory.length} keep the categories they have` : ""}. Attribute enrichment follows.`
 
+  const toProduct = (row: ProductRow): DrillDownProduct => ({
+    id: row.id,
+    description: row.description,
+    gtins: row.gtins,
+    category: row.category,
+    createDate: row.createDate,
+  })
+
+  // How much of the row's category is actually filled. A product with no
+  // category has no attribute set to measure against, so there is nothing to
+  // report and nothing worth opening.
+  const summaryFor = (row: ProductRow) =>
+    summarizeEnrichment(
+      enrichmentResultFor?.(toProduct(row)),
+      row.category ? getAttributesForBrick(row.category.brickCode).map((a) => a.name) : []
+    )
+
   const handleBulkEnrich = () => {
     if (selectedRows.length === 0) return
-    onEnrichProducts(selectedRows.map(({ id, description, gtins, category, createDate }) => ({ id, description, gtins, category, createDate })))
+    onEnrichProducts(selectedRows.map(toProduct))
   }
 
   const statusBadge = (status: ProductEnrichmentStatus) => {
@@ -244,6 +269,9 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Description</th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Category</th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Enrichment</th>
+                <th className="px-3 py-2 text-right font-semibold text-[#374151]" title="Attributes carrying a value, out of everything the product's category asks for">
+                  Attributes
+                </th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Create Date</th>
                 <th className="px-3 py-2 text-left font-semibold text-[#374151]">Last Update Date</th>
                 <th className="px-3 py-2 text-right font-semibold text-[#374151]">GTINs</th>
@@ -254,6 +282,15 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
             <tbody>
               {rows.map((row) => {
                 const eligible = isRowEligible(row)
+                const summary = summaryFor(row)
+                // Worth opening as soon as the product has a category — the detail
+                // screen lists what that category asks for even before a run.
+                const canViewEnrichment = summary.total > 0
+                const viewTitle = canViewEnrichment
+                  ? summary.hasRun
+                    ? `See what enrichment wrote for ${row.id} — ${summary.enriched} of ${summary.total} attributes filled`
+                    : `${row.id} hasn't been enriched yet — see the ${summary.total} attributes its category asks for`
+                  : `${row.id} has no category yet, so there are no attributes to show. Enrich it first.`
                 return (
                 <tr
                   key={row.id}
@@ -296,26 +333,53 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                     )}
                   </td>
                   <td className="px-3 py-2">{statusBadge(row.status)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {canViewEnrichment ? (
+                      <button
+                        onClick={() => onViewEnrichment(toProduct(row))}
+                        title={viewTitle}
+                        className="tabular-nums text-[#1a5fa6] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] rounded"
+                      >
+                        {summary.enriched}
+                        <span className="text-[#9ca3af]">/{summary.total}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[#9ca3af]" title={viewTitle}>—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-[#6b7280]">{row.createDate}</td>
                   <td className="px-3 py-2 text-[#6b7280]">{row.lastUpdateDate}</td>
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.gtins}</td>
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.images}</td>
                   <td className="px-3 py-2">
-                    <button
-                      onClick={() => onEnrichProducts([{ id: row.id, description: row.description, gtins: row.gtins, category: row.category, createDate: row.createDate }])}
-                      disabled={!eligible}
-                      title={
-                        !eligible
-                          ? ineligibleTitle
-                          : row.category === null
-                            ? `Enrich ${row.id} with AI — it will suggest a category first`
-                            : `Enrich ${row.id} with AI`
-                      }
-                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                    >
-                      <Sparkles className="w-3 h-3" aria-hidden="true" />
-                      Enrich
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onEnrichProducts([toProduct(row)])}
+                        disabled={!eligible}
+                        title={
+                          !eligible
+                            ? ineligibleTitle
+                            : row.category === null
+                              ? `Enrich ${row.id} with AI — it will suggest a category first`
+                              : `Enrich ${row.id} with AI`
+                        }
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                      >
+                        <Sparkles className="w-3 h-3" aria-hidden="true" />
+                        Enrich
+                      </button>
+                      {/* The enrichment outcome was previously only reachable from the
+                          completion screen, so it vanished once the user navigated away. */}
+                      <button
+                        onClick={() => onViewEnrichment(toProduct(row))}
+                        disabled={!canViewEnrichment}
+                        title={viewTitle}
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white whitespace-nowrap"
+                      >
+                        <Eye className="w-3 h-3" aria-hidden="true" />
+                        View enrichment
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 )
