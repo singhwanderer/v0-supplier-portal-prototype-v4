@@ -42,6 +42,23 @@ Every acceptance criterion below describes what happens while navigating around 
 one session; none of them describe what survives a page reload, because nothing does.
 This is stated once here rather than repeated on every story.
 
+### Built vs. intended
+
+Most criteria below describe behavior the prototype already has, so they can be verified
+by clicking through it. Some describe behavior the product *should* have that the
+prototype does not implement — these are marked **[intended — not in the prototype]** on
+the criterion or criteria group they apply to.
+
+The distinction matters because it changes what the criterion is for: an unmarked
+criterion can be checked against the running demo, while a marked one is a build
+instruction with nothing to check it against yet. Anything marked is a genuine product
+requirement, not a nice-to-have — it is marked only to stop a reader from assuming the
+demo already demonstrates it.
+
+Three areas carry these markings: the review screen's handling of unclassified products
+(P2-002, P2-009), classification as an attribute in its own right (P2-003, P2-004,
+P2-011, P2-013), and GTIN-level attribute storage (P2-004, P2-015).
+
 ### How AI shows up in this flow
 
 Three distinct AI behaviors run through these stories:
@@ -53,6 +70,29 @@ Three distinct AI behaviors run through these stories:
   Content" on a pajama top), AI proposes a value and a confidence score.
 - **Reasoning** — a short, plain-language justification shown alongside a suggestion,
   e.g. *"cotton" found in description* or *Requires fiber content from the supplier*.
+
+### Classification is attribute #1
+
+A product's **classification** — its GS1 category — is not a separate precondition
+sitting outside the attribute model. It is itself an attribute, and the first one. Two
+consequences run through the stories below:
+
+- **A product missing its classification is not enriched**, however many other attribute
+  values it happens to carry. It can have attributes; it cannot be complete without this
+  one.
+- **A missing classification blocks AI from generating the rest.** Which attributes a
+  product even requires is determined by its category, so until classification is
+  settled, AI has nothing to suggest values against. This is why classification is
+  sequenced first rather than merely listed first.
+
+This reframes the categorized/uncategorized split that runs through the flow. The
+difference between a code's 38 categorized and 14 uncategorized products is **where each
+product is in the sequence**, not whether it is eligible to be worked on. Both halves are
+in scope for enrichment; the uncategorized half simply has attribute #1 outstanding.
+
+**[intended — not in the prototype]** The prototype has no notion of classification as an
+attribute. Products are category-or-nothing, and a product without a category is treated
+as having no attribute story at all.
 
 Everything AI proposes is shown as a suggestion, never written to the product, until the
 supplier takes an explicit confirming action. Category suggestions and attribute-value
@@ -70,8 +110,8 @@ manual (file-upload) or integrated (system-to-system) supplier elsewhere in the 
 
 ### How this set is organized
 
-14 stories, one per screen (two for the largest screen, which has enough independent
-behavior to warrant a split), plus three cross-cutting stories describing behavior that
+15 stories, one per screen (two for the largest screen, which has enough independent
+behavior to warrant a split), plus four cross-cutting stories describing behavior that
 spans the whole flow rather than living on one screen. Each story bundles everything a
 supplier can *do* on that screen into grouped acceptance criteria, rather than splitting
 every individual button into its own story — the goal is a set a developer or QA
@@ -94,7 +134,7 @@ engineer can hold in their head as "what this screen does," not an atomized chec
 | 9 | AI Enrichment Review | Attribute-by-attribute review — reviewing suggestions |
 | 10 | AI Enrichment Review | Attribute-by-attribute review — completing and resuming |
 | 11 | Enrichment Detail | Read-back of what was written per product, and what wasn't |
-| — | Cross-cutting | Entry-path tracking, resumable coverage, session behavior |
+| — | Cross-cutting | Entry-path tracking, resumable coverage, session behavior, late-added GTINs |
 
 ---
 
@@ -151,8 +191,9 @@ without hunting for the right link.
 **User story**
 As a Supplier data manager, I want to see which of a code's products already have
 categories and which don't, launch AI category assignment for just the gap, or proceed
-straight to attribute enrichment for what's already categorized, so that I can choose
-where to focus without redoing settled work.
+straight to attribute enrichment without resolving that gap first, so that I can choose
+where to focus without redoing settled work or being blocked by the products that aren't
+ready yet.
 
 **Acceptance criteria**
 
@@ -161,8 +202,14 @@ where to focus without redoing settled work.
   a summary card with the categorized and uncategorized counts, a two-tone progress bar,
   and a percentage covered.
 - Given the same screen, when I look at the assigned section, then the already-assigned
-  products are grouped into read-only cards by category, each captioned as keeping its
-  existing category with no AI involved.
+  products are grouped into cards by category, each captioned as keeping its existing
+  category with no AI involved. The cards are a read-only summary *on this screen* — they
+  group and count, they don't offer editing here.
+- Given those cards, when I consider what they imply about the products in them, then
+  nothing about them is locked: a product's attribute values remain editable at any time
+  through the normal enrichment and detail screens, and its category can still be
+  changed. The "no AI involved" caption describes how these products got their category,
+  not a restriction on what can be done to them afterward.
 - Given the same screen, when I look at the unassigned section, then I see a distinct
   panel naming how many products don't have a category yet, a sample of them, and a
   note that attributes can only be enriched once a product has a category.
@@ -175,26 +222,51 @@ where to focus without redoing settled work.
   then I'm taken into AI category assignment scoped to only those uncategorized
   products — the already-assigned ones are not re-suggested or touched.
 
-*Proceeding to enrichment for what's already categorized*
+*Proceeding to enrichment*
 - Given a code with, say, 38 of 52 products categorized, when I click "Continue to
-  Attribute Enrichment (38 products)", then I'm taken directly into attribute review for
-  those 38 already-categorized products — I am not required to resolve the remaining 14
-  uncategorized ones first. **Categorized** (has a GS1 category assigned) and
-  **enriched** (has attribute values filled in) are separate steps in this flow; this
-  action only requires the first one to have happened.
-- Given that same button, when it's visible, then a note beside it states how many
-  products will be skipped and left flagged as still needing a category.
+  Attribute Enrichment (38 products)", then I'm taken into attribute review and **all 52
+  products appear there**. The button's count names how many products have their
+  classification settled and can therefore receive attribute suggestions — it is not a
+  count of how many products the screen will show.
+- Given I read that button before clicking it, then it's clear that I am not required to
+  resolve the remaining 14 first. **Categorized** (classification settled) and
+  **enriched** (remaining attribute values filled in) are sequential steps; this action
+  only requires the first to have happened for *some* products, not all.
 - Given a code with zero categorized products, when I look at this button, then it's
   disabled — there's nothing yet to proceed to enrichment with.
+
+*How the review screen splits the two halves* **[intended — not in the prototype]**
+- Given I continue to enrichment from a partially-covered code, when the review screen
+  loads, then the 38 classified products and the 14 unclassified ones appear in **two
+  distinct sections**, so I can see at a glance which half is which.
+- Given the classified section, then those products receive AI attribute suggestions
+  across their category's full attribute set, exactly as they would on a fully-covered
+  code.
+- Given the unclassified section, then each product shows a **proposed classification I
+  can change inline** — I don't have to leave this screen and run a separate category
+  assignment pass to resolve them.
+- Given a product in the unclassified section, when I look at its other attributes, then
+  none are suggested yet: until its classification is settled, AI has no attribute set to
+  suggest against. Resolving the classification is what unblocks the rest.
+- Given I settle a product's classification here, when it's confirmed, then that product
+  joins the classified half and its remaining attributes become available to review in
+  the same run.
+- Given a classified product that has never been enriched, when I look at it, then it
+  shows its category's full attribute set at zero filled — ready to enrich, not an error
+  state.
 
 *Leaving without changing anything*
 - Given I'm viewing this screen, when I click Back or Exit, then I return to wherever I
   came from with the code's coverage and status exactly as they were.
 
 **Anti-criteria**
-- Given I proceed to enrichment for the already-categorized subset, when the review
-  screen loads, then the uncategorized products must not appear anywhere in it — they
-  were explicitly skipped, not silently included.
+- Given I proceed to enrichment from a partially-covered code, when the review screen
+  loads, then the unclassified products must not be hidden from it. They are at an
+  earlier point in the same sequence, not excluded from the run.
+- Given those unclassified products are on screen, then they must not receive AI
+  suggestions for anything beyond their classification, and must not count toward
+  "products enriched" until their classification is settled — visible is not the same as
+  processed.
 - Given I open this screen and leave without clicking either action, when I return to
   the Selection Code List, then that code's coverage and status must not have changed at
   all.
@@ -223,9 +295,16 @@ through a code in batches that make sense to me.
 - Given a product that has a category but has never been enriched, when I look at its
   attributes cell, then it shows "0/{n}", where n is however many attributes that
   category requires.
-- Given a product with no category yet, when I look at its attributes cell, then it
-  shows a dash — there's nothing to measure attribute coverage against without a
-  category.
+- Given a product with no attribute values and no classification, when I look at its
+  attributes cell, then it shows a dash — there is genuinely nothing to count.
+- **[intended — not in the prototype]** Given a product that has attribute values but no
+  classification — values added manually rather than through an enrichment run — when I
+  look at its attributes cell, then it shows its filled count rather than a dash. Having
+  values without a classification is a real state, and the row must not present it as an
+  empty product.
+- **[intended — not in the prototype]** Given that same product, when I look at its
+  status, then it does not read as enriched: classification is itself a required
+  attribute, and it's outstanding.
 
 *Respecting the eligibility cutoff*
 - Given the Product List, when I look at "Enrichment eligible from" in the action bar,
@@ -233,6 +312,13 @@ through a code in batches that make sense to me.
 - Given a product created before that cutoff, when I look at its row, then it's shown
   dimmed, its checkbox is disabled, and its own "Enrich" action is disabled with an
   explanation that products created before the cutoff can't be enriched.
+- Given that same ineligible row, when I look at what remains available on it, then its
+  product id link, its GTIN drill-down, and its "View enrichment" action all still work.
+  The cutoff gates *enrichment*, not *inspection* — I can always read what a product
+  already carries, however old it is.
+- Given the dimming applied to an ineligible row, when I read the row, then the visual
+  treatment communicates "can't be enriched", not "row disabled" — the parts of the row I
+  can still use must not look inert.
 - Given the date picker, when I try to move the cutoff earlier, then it can go back at
   most one year from today — there's no way to widen eligibility further than that.
 
@@ -255,14 +341,21 @@ through a code in batches that make sense to me.
 - Given any product row, when I click its product id, then I'm taken to the GTIN list
   for that product.
 - Given a product row with a category, when I click "View enrichment", then I'm taken to
-  its Enrichment Detail; without a category, that action is disabled since there's
-  nothing to show yet.
+  its Enrichment Detail.
+- Given a product with neither a category nor any attribute values, when I look at "View
+  enrichment", then it's disabled — there is genuinely nothing to show.
+- **[intended — not in the prototype]** Given a product with attribute values but no
+  classification, when I look at "View enrichment", then it's available: there are values
+  to read back, and viewing them doesn't require a classification.
 
 **Anti-criteria**
 - Given I have nothing selected, when I look at "Enrich Selected Products with AI", then
   it must be disabled — enrichment can't launch with no scope.
 - Given an ineligible product row, when I try to select it via any bulk "select all"
   control, then it must not be included.
+- Given an ineligible product, when I try to reach its GTINs or its enrichment detail,
+  then it must not be unreachable or unreadable. Age blocks enrichment, never inspection
+  — a product I can't enrich is still a product I can look at.
 - Given the attributes count on this screen and the same product's count on Enrichment
   Detail, when I compare them, then they must never disagree — they describe the same
   thing.
@@ -281,16 +374,34 @@ enrichment or view its enrichment history directly from here, so that I don't ha
 back to the product list to act on what I'm already looking at.
 
 **Acceptance criteria**
+
+*Viewing GTIN-level detail*
 - Given I open the GTIN List for a product, when it loads, then I see every GTIN with
   its type, pack, color, size, cost, retail price and dates, plus the product's category
   (or "Not assigned") in the header.
+
+*Where attribute values actually live* **[intended — not in the prototype]**
+- Given this screen, when I consider where a confirmed attribute value is stored, then it
+  belongs to **the GTIN, not the product**. This is existing product behavior across TGC,
+  unchanged by this feature — suppliers add attributes at GTIN level.
+- Given a product's "{enriched}/{total}" count shown elsewhere in the flow, then it is an
+  **aggregate over that product's GTINs**. A product reading fully enriched means every
+  one of its GTINs is fully enriched.
+- Given a product whose GTINs don't all carry the same values, when I look at this
+  screen, then each GTIN shows its own values and its own enrichment status — the product
+  row's single figure is a rollup of these, not a value in its own right.
+
+*Eligibility*
 - Given the same screen, when I look at "Enrichment eligible from", then I see the same
   adjustable cutoff date picker as the Product List, applied to this one product.
 - Given the product was created before that cutoff, when I look at "Enrich Attributes
   with AI", then it's disabled with a caption explaining why.
+- Given that same ineligible product, when I look at the rest of the screen, then the
+  full GTIN table still renders and remains readable. Only the enrich action is gated.
 - Given an eligible product, when I click "Enrich Attributes with AI", then I enter
   enrichment scoped to this single product — the same flow the Product List's per-row
   Enrich uses.
+*Acting on the product*
 - Given a product that's been through at least one enrichment run, when I click "View
   enrichment", then I'm taken to its Enrichment Detail; for a product never enriched,
   this action doesn't appear at all.
@@ -299,8 +410,12 @@ back to the product list to act on what I'm already looking at.
 
 **Anti-criteria**
 - Given this screen has no per-GTIN selection, when I look for a way to enrich only some
-  of a product's GTINs, then no such control exists — enrichment here is strictly
-  product-level.
+  of a product's GTINs, then no such control exists — launching enrichment is
+  product-level, even though the values it writes land per GTIN.
+- **[intended — not in the prototype]** Given a product whose GTINs are not all in the
+  same state, when I look at this screen, then it must not show one product-level status
+  repeated identically against every GTIN — that would hide exactly the difference this
+  screen exists to show.
 
 ---
 
@@ -525,6 +640,20 @@ every value.
 - Given a badge's state, when the screen re-renders without me doing anything, then that
   state doesn't change on its own.
 
+*Products whose classification isn't settled yet* **[intended — not in the prototype]**
+- Given I entered this screen from a partially-covered code, when it renders, then
+  products without a settled classification appear in their own section, visually
+  separate from the products AI is suggesting attribute values for.
+- Given that section, when I look at a product in it, then it shows a proposed
+  classification with the same confirm/edit/reject actions every other suggestion gets —
+  classification is reviewed here as an attribute, not as a detour to another screen.
+- Given a product in that section, when I look for its other attributes, then there are
+  none to review yet: its attribute set isn't known until its category is. The section
+  makes that dependency visible rather than leaving the products looking merely empty.
+- Given I confirm a product's classification, when the screen updates, then that product
+  moves into the main section and its remaining attributes become reviewable in this same
+  run, without restarting.
+
 *Reviewing per-product detail*
 - Given a collapsed attribute row, when I click it, then it expands into one row per
   product, showing the suggested value, a confidence bar, a short reasoning line, and
@@ -666,6 +795,15 @@ review flow.
 - Given an attribute AI suggested a value for that I never actioned, when I look at its
   row, then the reason reads "left pending", showing the same struck-through value and
   confidence.
+- **[intended — not in the prototype]** Given a product with no settled classification,
+  when I look at the missing table, then **Classification appears as a missing attribute
+  in its own right**, with its own distinct reason: it blocks AI from generating the
+  rest of this product's attributes. This is a fourth reason, separate from the three
+  above — those describe an attribute AI couldn't or didn't fill, while this one explains
+  why the remaining attributes aren't even determined yet.
+- **[intended — not in the prototype]** Given that same product, when I look at the rest
+  of the missing table, then it doesn't claim a specific list of outstanding attributes
+  it can't yet know — the required set follows from the category, which isn't settled.
 - Given a product with every required attribute filled, when I look at the missing
   section, then it confirms there's nothing outstanding, with zero rows.
 
@@ -736,16 +874,33 @@ resuming work never costs me progress I already made.
 - Given a whole-code category confirmation instead of a scoped one, when it completes,
   then the code's coverage is set directly to its full product count, since a whole-code
   pass addresses everything at once.
-- Given a code already at "In Progress" or "AI Enriched", when more category work
+- Given a code already at "In Progress" or "AI Enriched", when more **category work**
   happens on it afterward, then its status must not move backward to an earlier stage.
 - Given a code with some but not all of its products enriched, when I check its status,
   then it must not yet read "AI Enriched" — that status is reserved for once every
   product in the code has actually been through enrichment, not most of them.
+- **[intended — not in the prototype]** Given a product missing its classification, when
+  I check whether it counts toward its code reaching "AI Enriched", then it doesn't —
+  classification is a required attribute, so the product isn't enriched without it.
+
+*What "forward-only" does and doesn't cover*
+- Given the forward-only rule above, when I ask what it applies to, then it governs
+  **category assignment specifically**: doing more category work on a code can never
+  demote it. It is not a blanket guarantee that status never decreases for any reason.
+- **[intended — not in the prototype]** Given new unenriched GTINs arriving on an already
+  enriched product (see P2-015), when the status recalculates, then it *does* move back
+  to "In Progress". This is a different trigger from category assignment and is a
+  legitimate downgrade: the code genuinely has outstanding work again, and hiding that
+  behind a forward-only rule would misreport it.
 
 **Anti-criteria**
 - Given a scoped pass adds 3 products to a code's coverage, when I check the result, then
   the code's coverage must not reset to just those 3 — additive passes never replace
   existing progress.
+- **[intended — not in the prototype]** Given the forward-only rule, when new unenriched
+  GTINs appear on an enriched product, then that rule must not be used to keep the code
+  showing "AI Enriched" — forward-only protects category progress, it does not suppress
+  genuine new work.
 
 ---
 
@@ -776,6 +931,69 @@ without fear of losing or duplicating decisions.
 
 ---
 
+## 15. Cross-cutting: GTINs added after an enrichment run
+
+### P2-015 — See GTINs added after enrichment flagged as still needing work
+
+**[intended — not in the prototype]** Every criterion in this story describes behavior
+that does not exist yet. The prototype stores enrichment results per product, so a GTIN
+added after a run is not representable — this story specifies what should happen once
+values are stored per GTIN (P2-004).
+
+**User story**
+As a Supplier data manager, I want GTINs added to a product after its enrichment run to
+be visibly flagged as still needing enrichment, so that a product marked enriched doesn't
+quietly hide GTINs that were never covered.
+
+**Why this happens**
+Products accumulate GTINs over time — a new color, a new pack size. A run enriches the
+GTINs that existed when it ran. Without this story, the product keeps whatever status
+that run gave it, and the new GTIN's empty attributes are invisible behind a green badge.
+
+**Acceptance criteria**
+
+*Seeing the gap*
+- Given a product fully enriched by an earlier run, when a new GTIN is added to it
+  afterward, then that GTIN shows as unenriched on the GTIN List alongside its enriched
+  siblings.
+- Given that product's "{enriched}/{total}" count, when it recalculates, then it drops
+  below full to reflect the new GTIN — e.g. a product that read 16/16 across 4 GTINs now
+  reads short once a fifth GTIN arrives with nothing filled.
+- Given I look at the product without opening its GTIN List, then the shortfall is
+  visible from the count alone — I shouldn't have to drill in to discover there's
+  outstanding work.
+
+*Status*
+- Given a product previously marked "AI Enriched", when a new unenriched GTIN is added,
+  then its status **reverts to "In Progress"**.
+- Given a selection code previously marked "AI Enriched", when one of its products
+  reverts this way, then the code leaves "AI Enriched" too — it no longer meets the bar
+  of every product being fully enriched.
+- Given this reversion, when compared against the forward-only status rule in P2-013,
+  then the two are consistent: forward-only governs category assignment, and this is new
+  outstanding work rather than a repeat of settled work.
+
+*Closing the gap*
+- Given a product with some enriched and some unenriched GTINs, when I run enrichment on
+  it again, then AI works on the outstanding GTINs only.
+- Given that re-run, when it saves, then confirmed values on the already-enriched GTINs
+  are left exactly as they were — a re-run to cover a new GTIN never re-opens or
+  overwrites settled decisions on the others.
+- Given every GTIN is covered after the re-run, when the status recalculates, then the
+  product returns to "AI Enriched".
+
+**Anti-criteria**
+- Given a product whose GTIN count is short, when I look at it anywhere in the flow, then
+  it must not present as complete with no indication of the gap — this is the whole point
+  of the story.
+- Given a re-run covering only new GTINs, when it completes, then it must not reset,
+  re-prompt, or overwrite the attribute decisions already confirmed on the older GTINs.
+- Given a new GTIN arrives, when the product's status changes, then its *category
+  assignment* progress must not be disturbed — the product is still categorized; only its
+  attribute enrichment is incomplete.
+
+---
+
 ## Session lifecycle coverage summary
 
 Addressed directly: P2-010 (completing with pending items, resuming a completed run),
@@ -786,5 +1004,32 @@ with — stated once here rather than repeated as a caveat on every story.
 
 ---
 
+## Open questions these stories don't settle
+
+Raised by the classification and GTIN-grain corrections, and left deliberately
+unanswered rather than guessed at:
+
+- **Where does a proposed classification come from for a product that already has
+  attribute values?** These stories assume AI proposes it like any other suggestion. It
+  may be better to infer it *from* the values already present, which is a different
+  behavior with different confidence characteristics.
+- **What does a product require before its classification is settled?** The required
+  attribute set follows from the category, so an unclassified product has no defined
+  denominator. The stories avoid claiming one; the real feature needs a rule.
+- **How does a supplier add attributes to an unclassified product today, and does that
+  path change?** Classification-blocks-generation constrains what *AI* can do; it isn't
+  yet decided whether it should constrain manual entry the same way.
+- **What counts as "the same" GTIN across re-runs?** P2-015 assumes new GTINs are
+  distinguishable from existing ones. Whether that's by identifier alone, or needs a
+  first-seen timestamp, is unspecified.
+
+---
+
 Stories are ready for refinement. Flag any that need splitting, descoping, or
 additional criteria before engineering picks them up.
+
+Note for planning: criteria marked **[intended — not in the prototype]** carry real
+build cost and cannot be verified against the demo. They cluster into three pieces of
+work — the two-section review screen, classification as an attribute, and GTIN-level
+attribute storage — with the third being the largest, since it changes where values are
+stored rather than how they're displayed.
