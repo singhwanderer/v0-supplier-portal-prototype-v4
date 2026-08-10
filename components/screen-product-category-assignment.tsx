@@ -203,6 +203,30 @@ export function ScreenProductCategoryAssignment({
           001 category-confirmation cards (border, confidence bar, Confirm/Undo actions). */}
       {confident.length > 0 && (
         <div className="grid gap-3">
+          {(pendingConfident.length > 0 || preBatchSnapshot) && (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[12px] text-[#6b7280]">
+                {confident.length} confident suggestion{confident.length === 1 ? "" : "s"} (70%+ match)
+              </p>
+              {preBatchSnapshot ? (
+                <button
+                  onClick={undoBatch}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#fef2f2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dc2626]"
+                  style={{ borderColor: "#dc2626", color: "#dc2626" }}
+                >
+                  Undo Accept All
+                </button>
+              ) : (
+                <button
+                  onClick={acceptAllConfident}
+                  className="px-3 py-1.5 text-[13px] font-semibold border-2 rounded transition-colors hover:bg-[#f0f2f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                  style={{ borderColor: "#1a1f5e", color: "#1a1f5e" }}
+                >
+                  Accept All Confident ({pendingConfident.length})
+                </button>
+              )}
+            </div>
+          )}
           {confident.map((row) => (
             <ProductCategoryCard
               key={row.product.id}

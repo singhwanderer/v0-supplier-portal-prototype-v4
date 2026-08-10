@@ -484,8 +484,17 @@ export default function Home() {
             // full scope (assigned + still-needs-classification); other flows fall back
             // to the unscoped whole-code review they always used.
             if (isSleepwearFlow && code) {
-              setEnrichmentProductScope(buildCoverageReviewScope(coveredCount, parkedUnassignedCount))
+              const fullScope = buildCoverageReviewScope(coveredCount, parkedUnassignedCount)
+              setEnrichmentProductScope(fullScope)
               setScopeFromCoverage(true)
+              // Route through category assignment first, same as the whole-code and
+              // drill-down paths — classification is always resolved on its own screen
+              // before attribute review, never inline within it.
+              setCategorizableProducts(
+                fullScope.map((p) => ({ id: p.id, description: p.description, gtins: p.gtins, category: p.category }))
+              )
+              setScreen("product-category-assignment")
+              return
             }
             setScreen("ai-enrichment-review")
           }}
@@ -608,13 +617,6 @@ export default function Home() {
               const product = enrichmentProductScope?.find((p) => p.id === productId)
               if (product) openEnrichmentDetail(product)
             }}
-            onClassifyProduct={(productId, category) => {
-              setProductCategoryUpdates((prev) => ({ ...prev, [productId]: category }))
-              setEnrichmentProductScope((prev) =>
-                prev ? prev.map((p) => (p.id === productId ? { ...p, category } : p)) : prev
-              )
-              addCoverage(activeCode, 1)
-            }}
           />
         ) : (
           <ScreenAIEnrichmentReview
@@ -734,13 +736,13 @@ export default function Home() {
 
       {screen === "product-category-assignment" && categorizableProducts && (
         <ScreenProductCategoryAssignment
-          code={drillDownCode}
-          codeDescription={drillDownCodeMeta?.description ?? ""}
+          code={activeCode}
+          codeDescription={effectiveCodesMetadata[activeCode]?.description ?? drillDownCodeMeta?.description ?? ""}
           products={categorizableProducts}
           categoryOptions={isSleepwearFlow ? SLEEPWEAR_CATEGORY_OPTIONS : ALL_CATEGORY_OPTIONS}
           allowedBrickCodes={getBricksForSelectionCode(activeCode)}
           stepLabel={stepLabelFor("product-category-assignment")}
-          onBack={() => setScreen("product-list")}
+          onBack={() => setScreen(scopeFromCoverage ? "category-coverage" : "product-list")}
           onConfirm={(assignments) => {
             setCategorizableProducts(null)
             handleScopedAssignments(assignments)
@@ -748,7 +750,7 @@ export default function Home() {
           onSaveAndExit={(assignments) => {
             applyScopedAssignments(assignments)
             setCategorizableProducts(null)
-            setScreen("product-list")
+            setScreen(scopeFromCoverage ? "category-coverage" : "product-list")
           }}
         />
       )}
