@@ -12,9 +12,9 @@ the screens and columns PM has flagged as Phase 2. Treat that visual marking as 
 authoritative scope boundary; extend it rather than re-litigating scope in prose when
 new Phase 2 work lands.
 
-See `PHASE_2_GAP_ANALYSIS.md` for the full review of where an earlier draft of this
-document had drifted from the code, and `PHASE_2_USER_STORIES.md` for the story set
-written against the corrected requirements below.
+See `PHASE_2_USER_STORIES.md` for the story set written against the requirements
+below — that document is the current source of truth for user-facing behavior and is
+kept in sync with the code directly.
 
 ## Overview
 
