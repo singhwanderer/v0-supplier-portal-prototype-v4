@@ -44,7 +44,7 @@ const COVERAGE_DETAIL_BY_CODE: Record<string, CoverageDetail> = {
 interface ScreenCategoryCoverageProps {
   selectedCodes: string[]
   codesMetadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }>
-  onProceedToEnrichment: (opts: { coveredCount: number; parkedUnassignedCount: number }) => void
+  onProceedToEnrichment: () => void
   onBack: () => void
   /** Leave the flow without enriching. Nothing is persisted — this screen is read-only. */
   onExit?: () => void
@@ -226,7 +226,7 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onProceed
             </p>
           )}
           <button
-            onClick={() => onProceedToEnrichment({ coveredCount: assignedCount, parkedUnassignedCount: unassignedCount })}
+            onClick={onProceedToEnrichment}
             disabled={totalProducts === 0}
             className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             style={{ backgroundColor: "#1a5fa6" }}
