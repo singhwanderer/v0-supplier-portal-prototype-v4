@@ -1,13 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, Copy, Eye } from "lucide-react"
+import { Sparkles, Copy, Eye, Pencil } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate } from "@/lib/date-utils"
 import { getAttributesForBrick } from "@/lib/category-attributes"
 import { summarizeEnrichment, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 
 import { PhaseTag } from "@/components/phase-tag"
+
+export interface ProductCategoryOptionGroup {
+  parent: string
+  children: { name: string; brickCode: string }[]
+}
 
 // Scenario 2: TGC-style Product List drill-down (Selection Code List → Product List).
 // Mirrors the classic TGC layout (breadcrumb, header info block, filter band, table)
@@ -77,20 +82,26 @@ interface ScreenProductListProps {
    * category is actually filled, and can open the detail behind that number.
    */
   enrichmentResultFor?: (product: DrillDownProduct) => ProductEnrichmentResult | undefined
+  /** Categories the supplier can pick from when editing a row's category inline. */
+  categoryOptions?: ProductCategoryOptionGroup[]
+  /** Persist a category change made directly from this list. */
+  onChangeCategory?: (productId: string, category: { name: string; brickCode: string }) => void
   onBack: () => void
   onOpenGtinList: (product: DrillDownProduct) => void
   onViewEnrichment: (product: DrillDownProduct) => void
   onEnrichProducts: (products: DrillDownProduct[]) => void
 }
 
-export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, enrichmentResultFor, onBack, onOpenGtinList, onViewEnrichment, onEnrichProducts }: ScreenProductListProps) {
+export function ScreenProductList({ code, metadata, productEnrichmentUpdates, productCategoryUpdates, enrichmentResultFor, categoryOptions, onChangeCategory, onBack, onOpenGtinList, onViewEnrichment, onEnrichProducts }: ScreenProductListProps) {
   const baseRows = PRODUCTS_BY_CODE[code] ?? buildFallbackRows(code, metadata)
-  const rows: ProductRow[] = baseRows.map((row) => ({
+  const allRows: ProductRow[] = baseRows.map((row) => ({
     ...row,
     category: productCategoryUpdates?.[row.id] ?? row.category,
     status: productEnrichmentUpdates[row.id] ?? row.status,
   }))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const flatCategoryOptions = categoryOptions?.flatMap((g) => g.children) ?? []
 
   // Enrichment cutoff — defaults to exactly 1 year ago but the user can adjust it
   // forward or backward within the allowed range (1 year ago → today).
@@ -102,8 +113,11 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
     })() : null
     return parsed !== null && parsed >= cutoffDate
   }
-  const eligibleRows = rows.filter((r) => isRowEligible(r))
+  const eligibleRows = allRows.filter((r) => isRowEligible(r))
   const ineligibleTitle = `Products created before ${cutoffDate.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })} can't be enriched`
+
+  // Eligible rows surface first — nothing about the sort otherwise changes.
+  const rows = [...allRows].sort((a, b) => Number(isRowEligible(b)) - Number(isRowEligible(a)))
 
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
@@ -321,14 +335,50 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                   </td>
                   <td className="px-3 py-2 text-[#374151]">{row.description}</td>
                   <td className="px-3 py-2">
-                    {row.category ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[#166534] text-[12px] font-medium">{row.category.name}</span>
-                        <span className="text-[10px] font-mono text-[#9ca3af]">{row.category.brickCode}</span>
-                      </span>
+                    {editingCategoryId === row.id ? (
+                      <select
+                        autoFocus
+                        defaultValue={row.category?.name ?? ""}
+                        onChange={(e) => {
+                          const picked = flatCategoryOptions.find((c) => c.name === e.target.value)
+                          if (picked) onChangeCategory?.(row.id, picked)
+                          setEditingCategoryId(null)
+                        }}
+                        onBlur={() => setEditingCategoryId(null)}
+                        className="px-2 py-1 text-[12px] border border-[#1a5fa6] rounded bg-white"
+                        aria-label={`Change category for ${row.id}`}
+                      >
+                        <option value="" disabled>
+                          Choose a category…
+                        </option>
+                        {flatCategoryOptions.map((c) => (
+                          <option key={c.brickCode} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
-                        Not assigned
+                      <span className="inline-flex items-center gap-1.5">
+                        {row.category ? (
+                          <>
+                            <span className="text-[#166534] text-[12px] font-medium">{row.category.name}</span>
+                            <span className="text-[10px] font-mono text-[#9ca3af]">{row.category.brickCode}</span>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
+                            Not assigned
+                          </span>
+                        )}
+                        {onChangeCategory && flatCategoryOptions.length > 0 && (
+                          <button
+                            onClick={() => setEditingCategoryId(row.id)}
+                            className="text-[#9ca3af] hover:text-[#1a5fa6] focus:outline-none"
+                            title={`Change category for ${row.id}`}
+                            aria-label={`Change category for ${row.id}`}
+                          >
+                            <Pencil className="w-3 h-3" aria-hidden="true" />
+                          </button>
+                        )}
                       </span>
                     )}
                   </td>
@@ -352,34 +402,19 @@ export function ScreenProductList({ code, metadata, productEnrichmentUpdates, pr
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.gtins}</td>
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.images}</td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onEnrichProducts([toProduct(row)])}
-                        disabled={!eligible}
-                        title={
-                          !eligible
-                            ? ineligibleTitle
-                            : row.category === null
-                              ? `Enrich ${row.id} with AI — it will suggest a category first`
-                              : `Enrich ${row.id} with AI`
-                        }
-                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                      >
-                        <Sparkles className="w-3 h-3" aria-hidden="true" />
-                        Enrich
-                      </button>
-                      {/* The enrichment outcome was previously only reachable from the
-                          completion screen, so it vanished once the user navigated away. */}
-                      <button
-                        onClick={() => onViewEnrichment(toProduct(row))}
-                        disabled={!canViewEnrichment}
-                        title={viewTitle}
-                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white whitespace-nowrap"
-                      >
-                        <Eye className="w-3 h-3" aria-hidden="true" />
-                        View enrichment
-                      </button>
-                    </div>
+                    {/* Enrichment now launches only from the bulk CTA above, so every
+                        row behaves the same way regardless of which one is clicked.
+                        The view stays reachable per row even when ineligible — an
+                        old product still shows what its category asks for. */}
+                    <button
+                      onClick={() => onViewEnrichment(toProduct(row))}
+                      disabled={!canViewEnrichment}
+                      title={viewTitle}
+                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white whitespace-nowrap"
+                    >
+                      <Eye className="w-3 h-3" aria-hidden="true" />
+                      {eligible ? "View enrichment" : "View Essential attributes"}
+                    </button>
                   </td>
                 </tr>
                 )

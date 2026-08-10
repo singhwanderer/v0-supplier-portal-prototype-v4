@@ -1,10 +1,13 @@
 "use client"
 
-import { CheckCircle2, ArrowRight, Info, HelpCircle, Sparkles, AlertTriangle } from "lucide-react"
+import { CheckCircle2, ArrowRight, Info, HelpCircle, AlertTriangle } from "lucide-react"
+import { SLEEPWEAR_COVERAGE_ASSIGNED, SLEEPWEAR_COVERAGE_UNASSIGNED_SAMPLES } from "@/lib/sleepwear-catalog"
 
 // Category Coverage view — shown when a selection code already has category
 // assignments. The supplier sees which products keep their existing categories
-// (no AI involved) and, if any are missing, assigns the remainder with AI.
+// (no AI involved); anything still missing a category gets one inline on the
+// review screen that "Continue" leads to — there's no separate assignment
+// detour from here.
 
 interface AssignedCategoryGroup {
   categoryName: string
@@ -25,19 +28,8 @@ interface CoverageDetail {
 
 const COVERAGE_DETAIL_BY_CODE: Record<string, CoverageDetail> = {
   "002": {
-    assignedGroups: [
-      { categoryName: "Night Dresses/Shirts",  brickCode: "10001339", productCount: 18 },
-      { categoryName: "Dressing Gowns",        brickCode: "10001338", productCount: 12 },
-      { categoryName: "Sleep Trousers/Shorts", brickCode: "10001341", productCount: 8 },
-    ],
-    unassignedSamples: [
-      { id: "S22041", description: "Silk nightgown collection",    gtins: 2 },
-      { id: "S22044", description: "Flannel pajama top",           gtins: 4 },
-      { id: "S22047", description: "Satin camisole set",           gtins: 2 },
-      { id: "S22051", description: "Jersey sleep dress",           gtins: 3 },
-      { id: "S22054", description: "Thermal henley nightshirt",    gtins: 2 },
-      { id: "S22058", description: "Waffle-knit robe",             gtins: 3 },
-    ],
+    assignedGroups: SLEEPWEAR_COVERAGE_ASSIGNED,
+    unassignedSamples: SLEEPWEAR_COVERAGE_UNASSIGNED_SAMPLES,
   },
   "003": {
     assignedGroups: [
@@ -52,7 +44,6 @@ const COVERAGE_DETAIL_BY_CODE: Record<string, CoverageDetail> = {
 interface ScreenCategoryCoverageProps {
   selectedCodes: string[]
   codesMetadata: Record<string, { gtins: number; products: number; description: string; categoriesAssigned: number }>
-  onAssignWithAI: (unassignedCount: number) => void
   onProceedToEnrichment: (opts: { coveredCount: number; parkedUnassignedCount: number }) => void
   onBack: () => void
   /** Leave the flow without enriching. Nothing is persisted — this screen is read-only. */
@@ -61,7 +52,7 @@ interface ScreenCategoryCoverageProps {
   stepLabel?: string
 }
 
-export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignWithAI, onProceedToEnrichment, onBack, onExit, stepLabel }: ScreenCategoryCoverageProps) {
+export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onProceedToEnrichment, onBack, onExit, stepLabel }: ScreenCategoryCoverageProps) {
   const code = selectedCodes[0] ?? ""
   const meta = codesMetadata[code] ?? { gtins: 0, products: 0, description: "", categoriesAssigned: 0 }
   const totalProducts = selectedCodes.reduce((s, c) => s + (codesMetadata[c]?.products ?? 0), 0)
@@ -199,19 +190,10 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignW
             )}
           </div>
 
-          <div className="pt-1">
-            <button
-              onClick={() => onAssignWithAI(unassignedCount)}
-              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
-              style={{ backgroundColor: "#1a5fa6" }}
-            >
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              Assign with AI
-            </button>
-            <p className="text-[11px] text-[#6b7280] mt-1">
-              AI suggests a category for each product; you confirm before anything is saved.
-            </p>
-          </div>
+          <p className="text-[11px] text-[#6b7280] pt-1">
+            AI will propose a category for each of these on the next screen, alongside the products already
+            categorized — confirm or edit it there before anything is saved.
+          </p>
         </div>
       )}
 
@@ -239,16 +221,17 @@ export function ScreenCategoryCoverage({ selectedCodes, codesMetadata, onAssignW
           {!allCovered && (
             <p className="flex items-center gap-1.5 text-[12px] text-[#92400e]">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-              {unassignedCount} products without categories will be skipped and stay flagged as needing a category.
+              {unassignedCount} products still need a category — you&apos;ll classify them on the next screen before
+              they can be enriched.
             </p>
           )}
           <button
             onClick={() => onProceedToEnrichment({ coveredCount: assignedCount, parkedUnassignedCount: unassignedCount })}
-            disabled={assignedCount === 0}
+            disabled={totalProducts === 0}
             className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             style={{ backgroundColor: "#1a5fa6" }}
           >
-            Continue to Attribute Enrichment ({assignedCount.toLocaleString()} products)
+            Continue to Attribute Enrichment ({totalProducts.toLocaleString()} products)
             <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
