@@ -54,9 +54,12 @@ instruction with nothing to check it against yet. Anything marked is a genuine p
 requirement, not a nice-to-have — it is marked only to stop a reader from assuming the
 demo already demonstrates it.
 
-One area carries these markings now: true GTIN-level attribute value storage (P2-004,
+Two areas carry these markings now: true GTIN-level attribute value storage (P2-004,
 P2-015 — values are still recorded per product, with a per-product GTIN-coverage count
-underneath as a partial stand-in).
+underneath as a partial stand-in), and classification appearing as a fourth
+missing-attribute reason on Enrichment Detail (P2-011 — a deliberate omission, not a
+gap; see that story for why). The review screen's handling of unclassified products and
+classification as attribute #1 are both built and unmarked below.
 
 ### How AI shows up in this flow
 
@@ -70,31 +73,31 @@ Three distinct AI behaviors run through these stories:
 - **Reasoning** — a short, plain-language justification shown alongside a suggestion,
   e.g. *"cotton" found in description* or *Requires fiber content from the supplier*.
 
-### Classification always happens first, on its own screen
+### Classification is attribute #1
 
-A product's **classification** — its GS1 category — is a precondition for attribute
-enrichment, resolved before a product ever reaches the review screen, never inline
-within it. Two consequences run through the stories below:
+A product's **classification** — its GS1 category — is not a separate precondition
+sitting outside the attribute model. It is itself an attribute, and the first one. Two
+consequences run through the stories below:
 
 - **A product missing its classification is not enriched**, however many other attribute
   values it happens to carry. It can have attributes; it cannot be complete without this
   one.
 - **A missing classification blocks AI from generating the rest.** Which attributes a
-  product even requires is determined by its category, so AI has nothing to suggest
-  values against until classification is settled.
+  product even requires is determined by its category, so until classification is
+  settled, AI has nothing to suggest values against. This is why classification is
+  sequenced first rather than merely listed first.
 
 This reframes the categorized/uncategorized split that runs through the flow. The
 difference between a code's 38 categorized and 14 uncategorized products is **where each
 product is in the sequence**, not whether it is eligible to be worked on. Both halves are
-in scope for enrichment; the uncategorized half simply has this precondition outstanding.
+in scope for enrichment; the uncategorized half simply has attribute #1 outstanding.
 
-Every entry path into attribute review — the whole-code path, the product-drill-down
-path, and Category Coverage's "Continue" — routes an uncategorized product through
-Product Category Assignment or Brick Confirmation first. AI proposes a category there,
-the supplier confirms (individually or via a bulk "accept all confident" action), and
-only a fully-classified scope ever proceeds into the review screen. The review screen
-itself has no notion of an unclassified product and never shows a classification row —
-by the time a product is on screen there, its category is already settled.
+This only surfaces on the review screen when a product without a settled classification
+actually reaches it — today that's the Category Coverage → Continue path, which carries
+its uncategorized half forward on purpose. The whole-code and product-drill-down paths
+both force classification to be resolved before a product ever reaches attribute
+review, so a reader working from those entry points won't see a Classification row at
+all; that's expected, not a gap.
 
 Everything AI proposes is shown as a suggestion, never written to the product, until the
 supplier takes an explicit confirming action. Category suggestions and attribute-value
@@ -192,9 +195,10 @@ without hunting for the right link.
 
 **User story**
 As a Supplier data manager, I want to see which of a code's products already have
-categories and which don't, and continue toward attribute review for the whole code
-without resolving that gap on this screen first, so that I can choose where to focus
-without redoing settled work or being blocked by the products that aren't ready yet.
+categories and which don't, and proceed straight into attribute review for the whole
+code — resolving any remaining classifications inline once I'm there — so that I can
+choose where to focus without redoing settled work or being blocked by the products
+that aren't ready yet.
 
 **Acceptance criteria**
 
@@ -218,43 +222,62 @@ without redoing settled work or being blocked by the products that aren't ready 
   see a confirmation that every product already has a category and no unassigned section
   at all.
 - Given this screen, then there is no separate action for launching AI category
-  assignment against just the uncategorized gap in isolation — clicking "Continue" is
-  the only path forward, and it carries the whole scope (both halves) into category
-  assignment together.
+  assignment against just the uncategorized gap — resolving those products' categories
+  happens inline once inside attribute review, not as a detour back through a category
+  assignment screen.
 
 *Proceeding to enrichment*
 - Given a code with, say, 38 of 52 products categorized, when I click "Continue to
-  Attribute Enrichment (52 products)", then I'm taken to Product Category Assignment
-  (P2-005) scoped to all 52 — the 38 already-categorized products listed read-only as
-  kept-as-is, and the 14 uncategorized ones carrying AI's proposed category for me to
-  confirm or correct. The button's count is the full product count in scope, the same
-  number the review screen will eventually show — not a count of just the classified
+  Attribute Enrichment (52 products)", then I'm taken into attribute review and **all 52
+  products appear there**. The button's count is the full product count in scope, the
+  same number the review screen itself shows — not a count of just the classified
   products.
   - UI: button label reads `Continue to Attribute Enrichment ({total} products)` where
     `{total}` is the code's whole product count, categorized and uncategorized combined.
 - Given I read that button before clicking it, then it's clear that I am not required to
-  have resolved the remaining 14 myself before clicking it — AI proposes a category for
-  each of them on the next screen, and I confirm it there, individually or in bulk,
-  before attribute review begins.
+  resolve the remaining 14 first. **Categorized** (classification settled) and
+  **enriched** (remaining attribute values filled in) are sequential steps; this action
+  only requires the first to have happened for *some* products, not all.
 - Given a code with zero categorized products, when I look at this button, then it's
   disabled — there's nothing yet to proceed to enrichment with.
-- Given I resolve every product's category on Product Category Assignment (P2-005) and
-  continue from there, when the attribute review screen loads, then all 52 products
-  appear with their full attribute sets — the same review screen every other entry path
-  into 002 already uses, with no separate "unclassified" concept on it at all.
+
+*How the review screen splits the two halves*
+- Given I continue to enrichment from a partially-covered code, when the review screen
+  loads, then the 38 classified products and the 14 unclassified ones appear in **two
+  distinct sections**, so I can see at a glance which half is which. The two sections are
+  a labeled divider row within the same attribute table rather than two separate
+  tables or panels — one table, two clearly headed zones.
+  - UI: a full-width divider row reading something like "Needs classification" opens the
+    unclassified group, followed later by a second divider ("Attribute review") opening
+    the classified group, inside one continuous attribute table.
+- Given the classified section, then those products receive AI attribute suggestions
+  across their category's full attribute set, exactly as they would on a fully-covered
+  code.
+- Given the unclassified section, then each product shows a **proposed classification I
+  can change inline** — I don't have to leave this screen and run a separate category
+  assignment pass to resolve them.
+- Given a product in the unclassified section, when I look at its other attributes, then
+  none are suggested yet: until its classification is settled, AI has no attribute set to
+  suggest against. Resolving the classification is what unblocks the rest.
+- Given I settle a product's classification here, when it's confirmed, then that product
+  joins the classified half and its remaining attributes become available to review in
+  the same run.
+- Given a classified product that has never been enriched, when I look at it, then it
+  shows its category's full attribute set at zero filled — ready to enrich, not an error
+  state.
 
 *Leaving without changing anything*
 - Given I'm viewing this screen, when I click Back or Exit, then I return to wherever I
   came from with the code's coverage and status exactly as they were.
 
 **Anti-criteria**
-- Given I click "Continue" from a partially-covered code, when the next screen loads,
-  then the uncategorized products must not be silently dropped from scope — all 52
-  proceed together, not just the 38 already categorized.
-- Given a product still on Product Category Assignment with its category unresolved,
-  then it must not be possible to reach attribute review with that product still
-  uncategorized — the review screen must never receive a product without a settled
-  category, from this path or any other.
+- Given I proceed to enrichment from a partially-covered code, when the review screen
+  loads, then the unclassified products must not be hidden from it. They are at an
+  earlier point in the same sequence, not excluded from the run.
+- Given those unclassified products are on screen, then they must not receive AI
+  suggestions for anything beyond their classification, and must not count toward
+  "products enriched" until their classification is settled — visible is not the same as
+  processed.
 - Given I open this screen and leave without clicking either action, when I return to
   the Selection Code List, then that code's coverage and status must not have changed at
   all.
@@ -475,14 +498,6 @@ that every product ends up with a category I've explicitly signed off on.
 - Given a confident- or uncertain-bucket card, when I click "Confirm Category", then it
   turns green with a confirmed marker, and a running "{x} of {n} confirmed" count
   increments; clicking "Undo" reverts it.
-- Given at least one confident-bucket card (≥70%) still unconfirmed, when I click
-  "Accept All Confident", then every confident card is confirmed at once, in a single
-  action — I don't have to click "Confirm Category" once per product to clear the
-  majority of a large batch.
-  - UI: a small "Accept All Confident (n)" button sits above the confident-bucket cards,
-    showing how many are still pending; once clicked it's replaced by "Undo Accept All",
-    which restores exactly the state from before the bulk action, the same paired
-    accept/undo pattern Brick Confirmation's "Confirm All Categories" uses.
 - Given an unclassified card, when I click "Choose Category", then a category picker
   opens; picking a value confirms that product with a marker showing I chose it manually.
 
@@ -501,9 +516,6 @@ that every product ends up with a category I've explicitly signed off on.
   a category freely is only possible on Individual Assignment. This is worth confirming
   as an intentional limitation before it ships, since the on-screen copy currently implies
   any suggestion can be changed here.
-- Given I click "Accept All Confident", when it runs, then uncertain-bucket and
-  unclassified cards must be left untouched — the action only ever reaches the ≥70%
-  bucket, never the ones still needing individual attention.
 - Given I continue to attribute enrichment with everything in this run resolved, when
   the review screen loads, then a product left unresolved in an earlier, separate pass
   must not silently appear in this run's scope.
@@ -679,10 +691,24 @@ every value.
   shows green as complete.
 - Given a badge's state, when the screen re-renders without me doing anything, then that
   state doesn't change on its own.
-- Given any product reaches this screen at all, then it already has a settled category —
-  classification is always resolved on Product Category Assignment or Brick Confirmation
-  first (see P2-002, P2-005, P2-007). This screen has no classification concept of its
-  own: every row here is a real GS1 attribute for the product's category, nothing more.
+
+*Products whose classification isn't settled yet*
+- Given I entered this screen from a partially-covered code, when it renders, then
+  products without a settled classification appear in their own section, visually
+  separate from the products AI is suggesting attribute values for. That separation is a
+  labeled divider row inside the same attribute table rather than a physically distinct
+  table or panel — one continuous table, two clearly headed zones.
+  - UI: a full-width divider row opens each zone within the one attribute table, the
+    same treatment described on Category Coverage's Continue action.
+- Given that section, when I look at a product in it, then it shows a proposed
+  classification with the same confirm/edit/reject actions every other suggestion gets —
+  classification is reviewed here as an attribute, not as a detour to another screen.
+- Given a product in that section, when I look for its other attributes, then there are
+  none to review yet: its attribute set isn't known until its category is. The section
+  makes that dependency visible rather than leaving the products looking merely empty.
+- Given I confirm a product's classification, when the screen updates, then that product
+  moves into the main section and its remaining attributes become reviewable in this same
+  run, without restarting.
 
 *Reviewing per-product detail*
 - Given a collapsed attribute row, when I click it, then it expands into one row per
@@ -825,12 +851,23 @@ review flow.
 - Given an attribute AI suggested a value for that I never actioned, when I look at its
   row, then the reason reads "left pending", showing the same struck-through value and
   confidence.
-- Given a product with no settled classification, when I ask whether it could ever reach
-  this screen's missing table, then it can't — classification is always resolved before
-  a product has any attribute story at all (see "Classification always happens first, on
-  its own screen" above), so there's no state here for a fourth "Classification missing"
-  reason to describe. "View enrichment" itself stays disabled for a product with neither
-  a category nor any attribute values, so Enrichment Detail is never opened on one.
+- **[intended — not in the prototype]** Given a product with no settled classification,
+  when I look at the missing table, then Classification does not appear there as a
+  fourth kind of missing attribute, distinct from "AI had no suggestion," "you rejected,"
+  and "left pending." This is a deliberate omission, not leftover work: Classification is
+  filtered out of the shared write-back model before it reaches this screen, because
+  letting it flow through like any other attribute silently inflates every downstream
+  attribute count — a product would read "1/19" instead of "0/19", its Classification
+  confirmation counting as one of the nineteen. Building a real fourth reason here would
+  mean either accepting that miscount or adding a parallel field this screen reads
+  differently from every other attribute — genuinely separate plumbing, not a small
+  addition, and not recommended as a quick follow-up.
+- Given that same reasoning, when I ask what the missing table should claim about a
+  product's outstanding attributes before its classification is settled, then it can't
+  claim a specific list — the required set follows from the category, which isn't
+  settled yet. In practice this state is unreachable anyway: "View enrichment" stays
+  disabled for a product with neither a category nor any attribute values, so Enrichment
+  Detail is never opened on one.
 - Given a product with every required attribute filled, when I look at the missing
   section, then it confirms there's nothing outstanding, with zero rows.
 
@@ -1076,11 +1113,10 @@ Stories are ready for refinement. Flag any that need splitting, descoping, or
 additional criteria before engineering picks them up.
 
 Note for planning: criteria marked **[intended — not in the prototype]** carry real
-build cost and cannot be verified against the demo. What's left is almost entirely one
-piece of work: true GTIN-level attribute value storage (P2-004, P2-015 — it changes
-where values are stored rather than how they're displayed), plus two smaller dependents
-in P2-015 that follow directly from it (a re-run scoped to only outstanding GTINs, and
-the attribute-fraction not reacting to a GTIN gap). P2-003 carries two further marked
-criteria describing a product with attribute values but no classification (e.g. via
-manual entry) — a genuinely separate, independent product decision, not something this
-pass touched.
+build cost and cannot be verified against the demo. What's left clusters into two pieces
+of work: true GTIN-level attribute value storage (P2-004, P2-015 — the larger of the
+two, since it changes where values are stored rather than how they're displayed) and a
+handful of smaller, deliberate non-builds called out individually where they occur
+(Classification as a fourth missing-reason on Enrichment Detail in P2-011; a re-run
+scoped to only outstanding GTINs, and the attribute-fraction not reacting to a GTIN gap,
+both in P2-015).
