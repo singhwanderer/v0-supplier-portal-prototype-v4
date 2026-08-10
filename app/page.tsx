@@ -29,7 +29,7 @@ import {
   ScreenProductCategoryAssignment,
   type CategorizableProduct,
 } from "@/components/screen-product-category-assignment"
-import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE, buildCoverageReviewScope } from "@/lib/sleepwear-catalog"
+import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
 import { getBricksForSelectionCode } from "@/lib/category-attributes"
 import { mergeEnrichmentResults, hasUncoveredGtins, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 import { ScreenProductEnrichmentDetail } from "@/components/screen-product-enrichment-detail"
@@ -478,14 +478,14 @@ export default function Home() {
         <ScreenCategoryCoverage
           selectedCodes={selectedSelectionCodes}
           codesMetadata={effectiveCodesMetadata}
-          onProceedToEnrichment={({ coveredCount, parkedUnassignedCount }) => {
-            const code = selectedSelectionCodes[0]
-            // Sleepwear's product-level flow can build real product identities for the
-            // full scope (assigned + still-needs-classification); other flows fall back
-            // to the unscoped whole-code review they always used.
-            if (isSleepwearFlow && code) {
-              setEnrichmentProductScope(buildCoverageReviewScope(coveredCount, parkedUnassignedCount))
-              setScopeFromCoverage(true)
+          onProceedToEnrichment={() => {
+            // Route the uncategorized remainder through the same grouped
+            // category-card confirmation Footwear already uses, instead of
+            // skipping straight to attribute review.
+            if (isSleepwearFlow) {
+              setBrickConfirmationScope("unassigned-only")
+              setScreen("brick-confirmation")
+              return
             }
             setScreen("ai-enrichment-review")
           }}
