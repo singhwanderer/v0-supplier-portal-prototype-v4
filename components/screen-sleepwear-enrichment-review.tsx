@@ -2,13 +2,14 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronRight, ChevronDown, Check, X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react"
-import { SLEEPWEAR_PRODUCTS_BY_CATEGORY } from "@/lib/sleepwear-catalog"
+import { SLEEPWEAR_PRODUCTS_BY_CATEGORY, SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_AVAILABLE_CATEGORIES } from "@/lib/sleepwear-catalog"
 import {
   getAttributesForBricks,
   getReasoningFor,
   getSuggestionsFor,
   type AttributeDef,
 } from "@/lib/category-attributes"
+import { suggestCategory } from "@/lib/category-suggestion"
 import { getCodeListValues } from "@/lib/gs1-code-lists"
 import { buildEnrichmentResults, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 import { AttributeValueCombobox } from "@/components/attribute-value-combobox"
@@ -27,10 +28,19 @@ import { AttributeValueCombobox } from "@/components/attribute-value-combobox"
 //   · when the caller passes the products in scope, review rows carry the real
 //     product and GTIN identities the user just drilled into
 //
-// Every product reaching this screen already has a category — classification is
-// always resolved on its own screen (Product Category Assignment or Brick
-// Confirmation) before a product ever enters attribute review, the same rule
-// Selection Code 001's flow has always followed.
+// Classification is attribute #1: when scopeProducts includes products with no
+// brickCode (arrived via Category Coverage's "Continue" with some still
+// unclassified), a synthetic "Classification" attribute group renders first.
+// A product with no brickCode gets no rows in any *other* group until its
+// classification is confirmed — the same "blocks the rest" rule a real AI
+// pipeline would apply, modeled here by simply not generating those rows yet.
+
+const CLASSIFICATION_ATTRIBUTE = "Classification"
+
+const CATEGORY_BRICK_BY_NAME = new Map(
+  SLEEPWEAR_CATEGORY_OPTIONS[0].children.map((c) => [c.name, c.brickCode])
+)
+
 
 // ── Data generation ───────────────────────────────────────────────────────────
 
@@ -92,7 +102,11 @@ function generateAttributeData(
   attributes: AttributeDef[],
   scopeProducts?: ScopeProduct[]
 ): AttributeGroup[] {
-  const allProducts = buildProductPool(productCount, scopeProducts)
+  // Classification is attribute #1 — a product with no brickCode yet doesn't
+  // get rows in the real attribute groups until it's confirmed (see
+  // unlockProductAttributes, which appends its rows once that happens).
+  const attributeScope = scopeProducts ? scopeProducts.filter((p) => p.brickCode) : undefined
+  const allProducts = buildProductPool(productCount, attributeScope)
 
   return attributes.map((attr) => {
     const suggestions = getSuggestionsFor(attr)
@@ -135,6 +149,31 @@ function generateAttributeData(
   })
 }
 
+/**
+ * The "Classification" pseudo-attribute for products with no brickCode yet.
+ * Confidence and reasoning come straight from suggestCategory — the same
+ * deterministic engine brick-confirmation and individual-assignment already
+ * use — so "AI classifies a product" means one thing everywhere in the app.
+ */
+function generateClassificationGroup(scopeProducts: ScopeProduct[] | undefined, brickCodes: string[]): AttributeGroup | null {
+  const unclassified = (scopeProducts ?? []).filter((p) => !p.brickCode)
+  if (unclassified.length === 0) return null
+
+  const gtins: ProductAttribute[] = unclassified.map((p, index) => {
+    const suggestion = suggestCategory(p.description, brickCodes)
+    return {
+      gtin: gtinForProduct(p.id, index),
+      productDescription: `${p.id} — ${p.description}`,
+      aiSuggestion: suggestion?.name ?? "",
+      aiReasoning: suggestion?.reasoning ?? "No garment type could be read from this description",
+      confidence: suggestion?.confidence ?? 0,
+      status: "pending" as const,
+    }
+  })
+
+  return { attributeName: CLASSIFICATION_ATTRIBUTE, gtins }
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 interface ScreenSleepwearEnrichmentReviewProps {
@@ -154,6 +193,8 @@ interface ScreenSleepwearEnrichmentReviewProps {
   onComplete: (confirmedPercentage: number, codes: string[], results: ProductEnrichmentResult[]) => void
   /** Opens the enrichment detail for one product from the completion screen. */
   onViewProductEnrichment?: (productId: string) => void
+  /** A product's classification was confirmed — persist the category upward. */
+  onClassifyProduct?: (productId: string, category: { name: string; brickCode: string }) => void
 }
 
 export function ScreenSleepwearEnrichmentReview({
@@ -167,6 +208,7 @@ export function ScreenSleepwearEnrichmentReview({
   onBack,
   onComplete,
   onViewProductEnrichment,
+  onClassifyProduct,
 }: ScreenSleepwearEnrichmentReviewProps) {
   const code = selectedCodes[0]
   const metadata = codesMetadata[code] || { gtins: 32, description: "Sleepwear" }
@@ -179,9 +221,11 @@ export function ScreenSleepwearEnrichmentReview({
   // Attributes follow the categories in scope, not the selection code.
   const attributes = useMemo(() => getAttributesForBricks(brickCodes ?? []), [brickCodes])
 
-  const [attributeGroups, setAttributeGroups] = useState<AttributeGroup[]>(() =>
-    generateAttributeData(totalProducts, attributes, scopeProducts)
-  )
+  const [attributeGroups, setAttributeGroups] = useState<AttributeGroup[]>(() => {
+    const base = generateAttributeData(totalProducts, attributes, scopeProducts)
+    const classification = generateClassificationGroup(scopeProducts, brickCodes ?? [])
+    return classification ? [classification, ...base] : base
+  })
   const [expandedAttributes, setExpandedAttributes] = useState<Set<string>>(new Set())
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -195,19 +239,60 @@ export function ScreenSleepwearEnrichmentReview({
   const [editProductValue, setEditProductValue] = useState("")
   const [isCompleted, setIsCompleted] = useState(false)
   const [completedAt, setCompletedAt] = useState("")
+  // Products that started with no brickCode and have since had their
+  // classification confirmed — what unlocked their other attribute rows, and
+  // what onClassifyProduct reports upward.
+  const [confirmedClassifications, setConfirmedClassifications] = useState<
+    Record<string, { name: string; brickCode: string }>
+  >({})
 
   const attrDefByName = useMemo(() => new Map(attributes.map((a) => [a.name, a])), [attributes])
+
+  // Drives the table's two section headers — Classification always renders
+  // first when present, so its presence alone tells us whether to show them.
+  const hasClassificationGroup = attributeGroups[0]?.attributeName === CLASSIFICATION_ATTRIBUTE
+  const firstRegularAttributeName = attributeGroups.find((g) => g.attributeName !== CLASSIFICATION_ATTRIBUTE)?.attributeName
+
+  const confirmClassification = (productDescription: string, categoryName: string) => {
+    if (confirmedClassifications[productDescription] || !categoryName) return
+    const brickCode = CATEGORY_BRICK_BY_NAME.get(categoryName) ?? ""
+    setConfirmedClassifications((prev) => ({ ...prev, [productDescription]: { name: categoryName, brickCode } }))
+    // Generate this product's rows in every other attribute group — the AI
+    // "generating the rest" now that its category is known.
+    setAttributeGroups((prev) =>
+      prev.map((group) => {
+        if (group.attributeName === CLASSIFICATION_ATTRIBUTE) return group
+        if (group.gtins.some((g) => g.productDescription === productDescription)) return group
+        const attrDef = attrDefByName.get(group.attributeName)
+        const suggestions = attrDef ? getSuggestionsFor(attrDef) : ["Not specified"]
+        const seed = gtinForProduct(productDescription, group.gtins.length)
+        const hash = seed.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
+        const newRow: ProductAttribute = {
+          gtin: seed,
+          productDescription,
+          aiSuggestion: suggestions[hash % suggestions.length],
+          aiReasoning: getReasoningFor(group.attributeName, productDescription),
+          confidence: Math.floor(82 + Math.random() * 18),
+          status: "pending",
+        }
+        return { ...group, gtins: [...group.gtins, newRow] }
+      })
+    )
+    const productId = productDescription.split(" — ")[0]
+    onClassifyProduct?.(productId, { name: categoryName, brickCode })
+  }
 
   // Review rows are keyed by "S22011 — Cotton pajama set"; map that back to the
   // product's own brick so results carry the category they were enriched under.
   const brickCodeByProductKey = useMemo(
     () =>
-      new Map<string, string>(
-        (scopeProducts ?? [])
+      new Map<string, string>([
+        ...(scopeProducts ?? [])
           .filter((p) => p.brickCode)
-          .map((p): [string, string] => [`${p.id} — ${p.description}`, p.brickCode as string])
-      ),
-    [scopeProducts]
+          .map((p): [string, string] => [`${p.id} — ${p.description}`, p.brickCode as string]),
+        ...Object.entries(confirmedClassifications).map(([key, c]): [string, string] => [key, c.brickCode]),
+      ]),
+    [scopeProducts, confirmedClassifications]
   )
 
   // A run covers every GTIN the product has right now — the count a
@@ -256,6 +341,9 @@ export function ScreenSleepwearEnrichmentReview({
       })
       return next
     })
+    if (attributeName === CLASSIFICATION_ATTRIBUTE) {
+      newlyConfirmed.forEach((gtin) => confirmClassification(gtin.productDescription, gtin.aiSuggestion))
+    }
   }
 
   // Batch confirm: toggling the same threshold undoes it. Only one active at a time.
@@ -294,6 +382,9 @@ export function ScreenSleepwearEnrichmentReview({
       toBatchSelect.forEach(({ key }) => { next[key] = "batch-selected" })
       return next
     })
+    toBatchSelect
+      .filter((e) => e.group.attributeName === CLASSIFICATION_ATTRIBUTE)
+      .forEach((e) => confirmClassification(e.gtin.productDescription, e.gtin.aiSuggestion))
   }
 
   const undoAllForAttribute = (attrName: string) => {
@@ -308,6 +399,12 @@ export function ScreenSleepwearEnrichmentReview({
 
   const setProductState = (attrName: string, productName: string, state: "confirmed" | "rejected" | "pending") => {
     setProductStates((prev) => ({ ...prev, [`${attrName}|${productName}`]: state }))
+    if (attrName === CLASSIFICATION_ATTRIBUTE && state === "confirmed") {
+      const row = attributeGroups
+        .find((g) => g.attributeName === CLASSIFICATION_ATTRIBUTE)
+        ?.gtins.find((g) => g.productDescription === productName)
+      if (row) confirmClassification(productName, row.aiSuggestion)
+    }
   }
 
   const saveProductEdit = (attrName: string, productName: string) => {
@@ -326,6 +423,7 @@ export function ScreenSleepwearEnrichmentReview({
     setProductStates((prev) => ({ ...prev, [`${attrName}|${productName}`]: "confirmed" }))
     setEditingProduct(null)
     setEditProductValue("")
+    if (attrName === CLASSIFICATION_ATTRIBUTE) confirmClassification(productName, editProductValue)
   }
 
   const cancelProductEdit = () => {
@@ -376,8 +474,11 @@ export function ScreenSleepwearEnrichmentReview({
     setProductStates(finalStates)
     setShowConfirmDialog(false)
     // Hand the decisions upward before they're lost with this screen's state.
+    // Classification isn't a real GS1 attribute — it drove this screen's own
+    // gating, but the persisted result should only carry the category's real
+    // attributes, same as the footwear flow's results.
     const results = buildEnrichmentResults(
-      attributeGroups,
+      attributeGroups.filter((g) => g.attributeName !== CLASSIFICATION_ATTRIBUTE),
       finalStates,
       {
         allAttributeNames: attributes.map((a) => a.name),
@@ -805,6 +906,31 @@ export function ScreenSleepwearEnrichmentReview({
 
               return (
                 <Fragment key={group.attributeName}>
+                  {hasClassificationGroup && group.attributeName === CLASSIFICATION_ATTRIBUTE && (
+                    <tbody>
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-3 py-2 bg-[#eff6ff] border-y border-[#bfdbfe] text-[11px] font-semibold text-[#1e40af] uppercase tracking-wide"
+                        >
+                          Needs classification ({group.gtins.length}) — confirm a category before its other
+                          attributes can be reviewed
+                        </td>
+                      </tr>
+                    </tbody>
+                  )}
+                  {hasClassificationGroup && group.attributeName === firstRegularAttributeName && (
+                    <tbody>
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-3 py-2 bg-[#f7f8fa] border-y border-[#d1d5db] text-[11px] font-semibold text-[#374151] uppercase tracking-wide"
+                        >
+                          Attribute review
+                        </td>
+                      </tr>
+                    </tbody>
+                  )}
                   <tbody id={`attr-row-${group.attributeName.replace(/\s+/g, "-").toLowerCase()}`}>
                   <tr
                     className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors cursor-pointer ${
@@ -959,7 +1085,24 @@ export function ScreenSleepwearEnrichmentReview({
                                   </div>
                                 </td>
                                 <td className="px-3 py-2.5 text-center">
-                                  {isEditing ? (
+                                  {isEditing && group.attributeName === CLASSIFICATION_ATTRIBUTE ? (
+                                    <select
+                                      value={editProductValue}
+                                      onChange={(e) => setEditProductValue(e.target.value)}
+                                      className="w-full max-w-[200px] mx-auto px-2 py-1.5 text-[12px] border border-[#1a5fa6] rounded bg-white"
+                                      aria-label={`Pick a category for ${gtin.productDescription}`}
+                                      autoFocus
+                                    >
+                                      <option value="" disabled>
+                                        Choose a category…
+                                      </option>
+                                      {SLEEPWEAR_AVAILABLE_CATEGORIES.map((name) => (
+                                        <option key={name} value={name}>
+                                          {name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : isEditing ? (
                                     <div className="w-full max-w-[200px] mx-auto">
                                       <AttributeValueCombobox
                                         attributeName={group.attributeName}
