@@ -20,6 +20,7 @@ import {
   type CategoryAssignment,
 } from "@/components/screen-individual-assignment"
 import { ScreenCategoryCoverage } from "@/components/screen-category-coverage"
+import { ScreenSleepwearCategoryCoverage } from "@/components/screen-sleepwear-category-coverage"
 import { ScreenProductList, type DrillDownProduct } from "@/components/screen-product-list"
 import { ScreenGtinList } from "@/components/screen-gtin-list"
 import { ScreenSleepwearBrickConfirmation } from "@/components/screen-sleepwear-brick-confirmation"
@@ -81,6 +82,9 @@ export default function Home() {
   const [brickConfirmationSource, setBrickConfirmationSource] = useState<"upload" | "selection-code">("upload")
   // When entered from the Category Coverage screen, brick confirmation only covers the unassigned subset
   const [brickConfirmationScope, setBrickConfirmationScope] = useState<"all" | "unassigned-only">("all")
+  // GTIN list / individual assignment are reachable from both Brick Confirmation and
+  // the merged Category Coverage screen — remembers which one to return to.
+  const [gtinListSource, setGtinListSource] = useState<"category-coverage" | "brick-confirmation">("brick-confirmation")
   // Bug 3 fix: Track individual assignment scope
   const [individualAssignmentScope, setIndividualAssignmentScope] = useState<"unclassified" | "all-low-confidence">("unclassified")
   // Product-level drill-down state (Selection Code List → Product List → GTIN List)
@@ -369,10 +373,9 @@ export default function Home() {
 
   // ── Step indicators ─────────────────────────────────────────────────────────
   // Both flows are numbered the same way so neither reads as a different product.
-  //   code-level with coverage (002):  Coverage 1/3 → Categories 2/3 → Attributes 3/3
-  //   code-level without coverage:     Categories 1/2 → Attributes 2/2
-  //   product-level, uncategorized:    Categories 1/2 → Attributes 2/2
-  //   product-level, already categorized: single step, no indicator
+  //   code-level, with or without existing coverage: Categories 1/2 → Attributes 2/2
+  //   product-level, uncategorized:                  Categories 1/2 → Attributes 2/2
+  //   product-level, already categorized:             single step, no indicator
   const stepLabelFor = (currentScreen: Screen): string | undefined => {
     if (enrichmentProductScope && !scopeFromCoverage) {
       // A scoped run only has a category step when something needed one.
@@ -381,17 +384,9 @@ export default function Home() {
       if (currentScreen === "ai-enrichment-review") return "Step 2 of 2"
       return undefined
     }
-    // Coverage only appears for codes that already had category assignments —
-    // including the coverage-continue path, which lands on ai-enrichment-review
-    // directly (classification for the rest happens inline on that screen).
-    const hasCoverageStep = selectedSelectionCodes.some((code) => {
-      const meta = effectiveCodesMetadata[code]
-      return meta ? meta.categoriesAssigned > 0 : false
-    })
-    const total = hasCoverageStep ? 3 : 2
-    if (currentScreen === "category-coverage") return `Step 1 of ${total}`
-    if (currentScreen === "brick-confirmation") return `Step ${hasCoverageStep ? 2 : 1} of ${total}`
-    if (currentScreen === "ai-enrichment-review") return `Step ${total} of ${total}`
+    if (currentScreen === "category-coverage") return "Step 1 of 2"
+    if (currentScreen === "brick-confirmation") return "Step 1 of 2"
+    if (currentScreen === "ai-enrichment-review") return "Step 2 of 2"
     return undefined
   }
 
@@ -475,24 +470,46 @@ export default function Home() {
       )}
 
       {screen === "category-coverage" && (
-        <ScreenCategoryCoverage
-          selectedCodes={selectedSelectionCodes}
-          codesMetadata={effectiveCodesMetadata}
-          onProceedToEnrichment={() => {
-            // Route the uncategorized remainder through the same grouped
-            // category-card confirmation Footwear already uses, instead of
-            // skipping straight to attribute review.
-            if (isSleepwearFlow) {
-              setBrickConfirmationScope("unassigned-only")
-              setScreen("brick-confirmation")
-              return
-            }
-            setScreen("ai-enrichment-review")
-          }}
-          onExit={() => setScreen("selection-code-list")}
-          stepLabel={stepLabelFor("category-coverage")}
-          onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
-        />
+        isSleepwearFlow ? (
+          <ScreenSleepwearCategoryCoverage
+            selectedCodes={selectedSelectionCodes}
+            codesMetadata={effectiveCodesMetadata}
+            stepLabel={stepLabelFor("category-coverage")}
+            onViewGtins={(categoryId, categoryName, brickCode) => {
+              setSelectedBrickCategoryId(categoryId)
+              setSelectedBrickCategoryName(categoryName)
+              setSelectedBrickCode(brickCode)
+              setGtinListSource("category-coverage")
+              setScreen("brick-gtin-list")
+            }}
+            onProceedToEnrichment={(categories, sessionConfirmedCount) => {
+              setConfirmedCategories(categories)
+              addCoverage(activeCode, sessionConfirmedCount)
+              setScreen("ai-enrichment-review")
+            }}
+            onSaveAndExit={(categories, sessionConfirmedCount) => {
+              if (categories.length > 0) setConfirmedCategories(categories)
+              handleSaveCategoriesAndExit(sessionConfirmedCount)
+            }}
+            onAssignIndividually={(scope) => {
+              setIndividualAssignmentScope(scope)
+              setAssignmentProducts(null)
+              setGtinListSource("category-coverage")
+              setScreen("individual-assignment")
+            }}
+            onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
+            onExit={() => setScreen("selection-code-list")}
+          />
+        ) : (
+          <ScreenCategoryCoverage
+            selectedCodes={selectedSelectionCodes}
+            codesMetadata={effectiveCodesMetadata}
+            onProceedToEnrichment={() => setScreen("ai-enrichment-review")}
+            onExit={() => setScreen("selection-code-list")}
+            stepLabel={stepLabelFor("category-coverage")}
+            onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
+          />
+        )
       )}
 
       {screen === "product-list" && drillDownCodeMeta && (
@@ -665,6 +682,7 @@ export default function Home() {
           setSelectedBrickCategoryId(categoryId)
           setSelectedBrickCategoryName(categoryName)
           setSelectedBrickCode(brickCode)
+          setGtinListSource("brick-confirmation")
           setScreen("brick-gtin-list")
         }
 
@@ -699,6 +717,7 @@ export default function Home() {
         const handleAssignIndividually = (scope: "unclassified" | "all-low-confidence") => {
           setIndividualAssignmentScope(scope)
           setAssignmentProducts(null)
+          setGtinListSource("brick-confirmation")
           setScreen("individual-assignment")
         }
 
@@ -763,7 +782,7 @@ export default function Home() {
               ? `Assign a category to ${assignmentProducts.length} product${assignmentProducts.length === 1 ? "" : "s"} before enriching`
               : undefined
           }
-          onBack={() => setScreen(assignmentProducts ? "product-list" : "brick-confirmation")}
+          onBack={() => setScreen(assignmentProducts ? "product-list" : gtinListSource)}
           onSaveAndExit={(assignedCount, _totalCount, assignments) => {
             if (assignmentProducts && assignments) {
               // Drill-down flow: persist onto the products and return to the list.
@@ -783,14 +802,14 @@ export default function Home() {
             categoryId={selectedBrickCategoryId}
             categoryName={selectedBrickCategoryName}
             code={activeCode}
-            onBack={() => setScreen("brick-confirmation")}
+            onBack={() => setScreen(gtinListSource)}
           />
         ) : (
           <ScreenBrickGtinList
             categoryId={selectedBrickCategoryId}
             categoryName={selectedBrickCategoryName}
             brickCode={selectedBrickCode}
-            onBack={() => setScreen("brick-confirmation")}
+            onBack={() => setScreen(gtinListSource)}
           />
         )
       )}
