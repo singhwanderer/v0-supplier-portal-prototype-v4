@@ -41,6 +41,13 @@ export interface ProductEnrichmentResult {
   brickCode?: string
   values: EnrichedAttributeValue[]
   unenriched: UnenrichedAttribute[]
+  /**
+   * How many of the product's GTINs this run covered. Not a per-GTIN value
+   * table — GTIN identity isn't threaded through the review screens, and
+   * products stay the primary unit of account per CLAUDE.md — but enough to
+   * tell whether the product has since gained a GTIN the run never saw.
+   */
+  gtinsCovered: number
 }
 
 // Minimal structural view of the review screens' state, so this module doesn't
@@ -71,9 +78,11 @@ export function buildEnrichmentResults(
     brickCodeFor?: (productKey: string) => string | undefined
     /** Maps a confirmed value to its GS1 code, when the attribute uses a code list. */
     codeListValueFor?: (attribute: string, value: string) => string | undefined
+    /** How many GTINs this run covered for a product — defaults to 0. */
+    gtinsCoveredFor?: (productKey: string) => number
   } = {}
 ): ProductEnrichmentResult[] {
-  const { allAttributeNames, brickCodeFor, codeListValueFor } = options
+  const { allAttributeNames, brickCodeFor, codeListValueFor, gtinsCoveredFor } = options
 
   // Product order follows first appearance so the detail screen lists them the
   // same way the review screen did.
@@ -131,6 +140,7 @@ export function buildEnrichmentResults(
       brickCode: brickCodeFor?.(productKey),
       values,
       unenriched,
+      gtinsCovered: gtinsCoveredFor?.(productKey) ?? 0,
     }
   })
 }
@@ -202,7 +212,20 @@ export function mergeEnrichmentResults(
       brickCode: result.brickCode ?? prior.brickCode,
       values: mergedValues,
       unenriched: mergedUnenriched,
+      // Each run covers every GTIN the product had at the time; the latest
+      // run's count is the current picture, same as brickCode above.
+      gtinsCovered: result.gtinsCovered,
     }
   }
   return next
+}
+
+/**
+ * True when the product has more GTINs today than the run that produced
+ * `result` covered — it gained one afterward, so nothing has been written
+ * for that GTIN yet.
+ */
+export function hasUncoveredGtins(result: ProductEnrichmentResult | undefined, currentGtinCount: number): boolean {
+  if (!result) return false
+  return currentGtinCount > result.gtinsCovered
 }

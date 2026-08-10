@@ -29,9 +29,9 @@ import {
   ScreenProductCategoryAssignment,
   type CategorizableProduct,
 } from "@/components/screen-product-category-assignment"
-import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE } from "@/lib/sleepwear-catalog"
+import { SLEEPWEAR_CATEGORY_OPTIONS, SLEEPWEAR_SELECTION_CODE, buildCoverageReviewScope } from "@/lib/sleepwear-catalog"
 import { getBricksForSelectionCode } from "@/lib/category-attributes"
-import { mergeEnrichmentResults, type ProductEnrichmentResult } from "@/lib/enrichment-results"
+import { mergeEnrichmentResults, hasUncoveredGtins, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 import { ScreenProductEnrichmentDetail } from "@/components/screen-product-enrichment-detail"
 
 export interface ConfirmedCategory {
@@ -97,6 +97,10 @@ export default function Home() {
   // When enrichment runs for specific products (not a whole selection code)
   const [enrichmentProductScope, setEnrichmentProductScope] = useState<DrillDownProduct[] | null>(null)
   const [enrichmentScopeLabel, setEnrichmentScopeLabel] = useState<string | null>(null)
+  // True when enrichmentProductScope was built from Category Coverage's "Continue" (all
+  // products, some still needing a category) rather than the product-list drill-down's
+  // already-categorized selection. Affects step labeling and where "back" lands.
+  const [scopeFromCoverage, setScopeFromCoverage] = useState(false)
   // Products handed to the individual-assignment screen by the product-level flow
   const [assignmentProducts, setAssignmentProducts] = useState<AssignableProduct[] | null>(null)
   // Uncategorized products awaiting AI's category proposal in the product-level flow
@@ -130,6 +134,7 @@ export default function Home() {
     setDrillDownProduct(null)
     setEnrichmentProductScope(null)
     setEnrichmentScopeLabel(null)
+    setScopeFromCoverage(false)
     setAssignmentProducts(null)
     setCategorizableProducts(null)
   }
@@ -230,6 +235,7 @@ export default function Home() {
         ? `Product ${products[0].id} — ${products[0].description}`
         : `${products.length} selected products`
     )
+    setScopeFromCoverage(false)
     setBrickConfirmationSource("selection-code")
     setBrickConfirmationScope("all")
 
@@ -267,6 +273,14 @@ export default function Home() {
     )
   }
 
+  // A direct edit from Product List / GTIN List — corrects a category rather
+  // than newly assigning one, so it doesn't touch coverage bookkeeping.
+  const handleChangeProductCategory = (productId: string, category: { name: string; brickCode: string }) => {
+    setProductCategoryUpdates((prev) => ({ ...prev, [productId]: category }))
+    setEnrichmentProductScope((prev) => (prev ? prev.map((p) => (p.id === productId ? { ...p, category } : p)) : prev))
+    if (drillDownProduct?.id === productId) setDrillDownProduct((prev) => (prev ? { ...prev, category } : prev))
+  }
+
   // Assignments done, continue into attribute enrichment.
   const handleScopedAssignments = (assignments: CategoryAssignment[]) => {
     applyScopedAssignments(assignments)
@@ -297,9 +311,18 @@ export default function Home() {
         enrichedByCode[code] = Array.from(new Set([...(enrichedByCode[code] ?? []), ...scopeIds]))
       })
       setEnrichedProductsByCode(enrichedByCode)
+      // A run covering many products (e.g. Category Coverage's "Continue") can
+      // leave some barely touched — each product's own result decides its
+      // status rather than the run's aggregate percentage covering all of them.
+      const resultByProductId = new Map(results.map((r) => [r.productId ?? r.productKey.split(" — ")[0], r]))
       setProductEnrichmentUpdates((prevMap) => {
         const next = { ...prevMap }
-        scopeIds.forEach((id) => { next[id] = nextStatus })
+        scopeIds.forEach((id) => {
+          const result = resultByProductId.get(id)
+          const total = result ? result.values.length + result.unenriched.length : 0
+          const ratio = total > 0 ? result!.values.length / total : 0
+          next[id] = ratio >= 0.5 ? "ai-enriched" : ratio > 0 ? "in-progress" : "needs-enrichment"
+        })
         return next
       })
     }
@@ -328,7 +351,8 @@ export default function Home() {
   }
 
   // Where "back" should land depends on whether the user came via a drill-down.
-  const backFromEnrichment = () => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")
+  const backFromEnrichment = () =>
+    setScreen(scopeFromCoverage ? "category-coverage" : enrichmentProductScope ? "product-list" : "selection-code-list")
 
   // Enrichment results are keyed by the label the review screens build their
   // rows from, so the detail screen can find a product's run.
@@ -350,14 +374,16 @@ export default function Home() {
   //   product-level, uncategorized:    Categories 1/2 → Attributes 2/2
   //   product-level, already categorized: single step, no indicator
   const stepLabelFor = (currentScreen: Screen): string | undefined => {
-    if (enrichmentProductScope) {
+    if (enrichmentProductScope && !scopeFromCoverage) {
       // A scoped run only has a category step when something needed one.
       if (!categorizableProducts && currentScreen === "ai-enrichment-review") return undefined
       if (currentScreen === "product-category-assignment") return "Step 1 of 2"
       if (currentScreen === "ai-enrichment-review") return "Step 2 of 2"
       return undefined
     }
-    // Coverage only appears for codes that already had category assignments.
+    // Coverage only appears for codes that already had category assignments —
+    // including the coverage-continue path, which lands on ai-enrichment-review
+    // directly (classification for the rest happens inline on that screen).
     const hasCoverageStep = selectedSelectionCodes.some((code) => {
       const meta = effectiveCodesMetadata[code]
       return meta ? meta.categoriesAssigned > 0 : false
@@ -411,6 +437,7 @@ export default function Home() {
             setBrickConfirmationScope("all")
             setEnrichmentProductScope(null)
             setEnrichmentScopeLabel(null)
+            setScopeFromCoverage(false)
             setSelectedSelectionCodes([])
             setScreen("brick-confirmation")
           }}
@@ -427,6 +454,7 @@ export default function Home() {
             setBrickConfirmationScope("all")
             setEnrichmentProductScope(null)
             setEnrichmentScopeLabel(null)
+            setScopeFromCoverage(false)
             setAssignmentProducts(null)
             // Codes with existing category assignments go through the Category Coverage
             // view first; codes with none follow the original AI-classification flow.
@@ -450,11 +478,17 @@ export default function Home() {
         <ScreenCategoryCoverage
           selectedCodes={selectedSelectionCodes}
           codesMetadata={effectiveCodesMetadata}
-          onAssignWithAI={() => {
-            setBrickConfirmationScope("unassigned-only")
-            setScreen("brick-confirmation")
+          onProceedToEnrichment={({ coveredCount, parkedUnassignedCount }) => {
+            const code = selectedSelectionCodes[0]
+            // Sleepwear's product-level flow can build real product identities for the
+            // full scope (assigned + still-needs-classification); other flows fall back
+            // to the unscoped whole-code review they always used.
+            if (isSleepwearFlow && code) {
+              setEnrichmentProductScope(buildCoverageReviewScope(coveredCount, parkedUnassignedCount))
+              setScopeFromCoverage(true)
+            }
+            setScreen("ai-enrichment-review")
           }}
-          onProceedToEnrichment={() => setScreen("ai-enrichment-review")}
           onExit={() => setScreen("selection-code-list")}
           stepLabel={stepLabelFor("category-coverage")}
           onBack={() => setScreen(enrichmentProductScope ? "product-list" : "selection-code-list")}
@@ -470,6 +504,8 @@ export default function Home() {
           }}
           productEnrichmentUpdates={productEnrichmentUpdates}
           productCategoryUpdates={productCategoryUpdates}
+          categoryOptions={isSleepwearFlow ? SLEEPWEAR_CATEGORY_OPTIONS : ALL_CATEGORY_OPTIONS}
+          onChangeCategory={handleChangeProductCategory}
           onBack={() => setScreen("selection-code-list")}
           onOpenGtinList={(product) => {
             setDrillDownProduct(product)
@@ -491,6 +527,35 @@ export default function Home() {
           onBackToSelectionCodes={() => setScreen("selection-code-list")}
           onViewEnrichment={() => openEnrichmentDetail(drillDownProduct)}
           onEnrich={() => startProductScopedEnrichment([drillDownProduct])}
+          onGtinAdded={
+            isSleepwearFlow
+              ? () => {
+                  const key = enrichmentKeyFor(drillDownProduct)
+                  const updatedProduct = { ...drillDownProduct, gtins: drillDownProduct.gtins + 1 }
+                  setDrillDownProduct(updatedProduct)
+                  const result = enrichedAttributes[key]
+                  // A gap only matters once a run exists to fall behind — an
+                  // unenriched product just gains a GTIN, nothing reverts.
+                  if (result && hasUncoveredGtins(result, updatedProduct.gtins)) {
+                    setProductEnrichmentUpdates((prev) => ({ ...prev, [drillDownProduct.id]: "in-progress" }))
+                    setEnrichmentUpdates((prev) => {
+                      const meta = metaForCode(drillDownCode)
+                      const prevEntry = prev[drillDownCode]
+                      return {
+                        ...prev,
+                        [drillDownCode]: {
+                          status: "in-progress",
+                          lastEnrichedDate: prevEntry?.lastEnrichedDate ?? meta?.lastEnrichedDate ?? "TBD",
+                          categoriesAssigned: prevEntry?.categoriesAssigned ?? meta?.categoriesAssigned,
+                        },
+                      }
+                    })
+                  }
+                }
+              : undefined
+          }
+          categoryOptions={isSleepwearFlow ? SLEEPWEAR_CATEGORY_OPTIONS : ALL_CATEGORY_OPTIONS}
+          onChangeCategory={(category) => handleChangeProductCategory(drillDownProduct.id, category)}
         />
       )}
 
@@ -514,6 +579,7 @@ export default function Home() {
                   brickCode: detailProduct.category?.brickCode,
                   values: added,
                   unenriched: [],
+                  gtinsCovered: enrichedAttributes[key]?.gtinsCovered ?? 0,
                 },
               ])
             )
@@ -535,11 +601,19 @@ export default function Home() {
             }))}
             brickCodes={scopeBrickCodes}
             stepLabel={stepLabelFor("ai-enrichment-review")}
+            backLabel={scopeFromCoverage ? "Back to Category Coverage" : undefined}
             onBack={backFromEnrichment}
             onComplete={handleEnrichmentComplete}
             onViewProductEnrichment={(productId) => {
               const product = enrichmentProductScope?.find((p) => p.id === productId)
               if (product) openEnrichmentDetail(product)
+            }}
+            onClassifyProduct={(productId, category) => {
+              setProductCategoryUpdates((prev) => ({ ...prev, [productId]: category }))
+              setEnrichmentProductScope((prev) =>
+                prev ? prev.map((p) => (p.id === productId ? { ...p, category } : p)) : prev
+              )
+              addCoverage(activeCode, 1)
             }}
           />
         ) : (

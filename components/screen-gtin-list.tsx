@@ -1,12 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, Copy, Eye } from "lucide-react"
-import type { DrillDownProduct } from "@/components/screen-product-list"
+import { Sparkles, Copy, Eye, Plus, Pencil } from "lucide-react"
+import type { DrillDownProduct, ProductCategoryOptionGroup } from "@/components/screen-product-list"
 import { DatePicker } from "@/components/ui/date-picker"
 import { getEnrichmentCutoffDate } from "@/lib/date-utils"
 import { getAttributesForBrick } from "@/lib/category-attributes"
-import { summarizeEnrichment, type ProductEnrichmentResult } from "@/lib/enrichment-results"
+import { summarizeEnrichment, hasUncoveredGtins, type ProductEnrichmentResult } from "@/lib/enrichment-results"
 import { PhaseTag } from "@/components/phase-tag"
 
 // Scenario 2: TGC-style GTIN List drill-down (Product List → GTIN List).
@@ -68,11 +68,26 @@ interface ScreenGtinListProps {
   onBackToSelectionCodes: () => void
   onViewEnrichment: () => void
   onEnrich: () => void
+  /**
+   * Simulates a GTIN arriving after enrichment already ran (P2-015) — there's
+   * no backend to add one for real, so this stands in for that. Present only
+   * where the flow tracks GTIN coverage; omit to hide the affordance.
+   */
+  onGtinAdded?: () => void
+  /** Categories the supplier can pick from when editing the product's category. */
+  categoryOptions?: ProductCategoryOptionGroup[]
+  /** Persist a category change made from this screen — applies to the whole product. */
+  onChangeCategory?: (category: { name: string; brickCode: string }) => void
 }
 
-export function ScreenGtinList({ code, codeDescription, product, enrichmentResult, onBack, onBackToSelectionCodes, onViewEnrichment, onEnrich }: ScreenGtinListProps) {
+export function ScreenGtinList({ code, codeDescription, product, enrichmentResult, onBack, onBackToSelectionCodes, onViewEnrichment, onEnrich, onGtinAdded, categoryOptions, onChangeCategory }: ScreenGtinListProps) {
   const rows = GTINS_BY_PRODUCT[product.id] ?? buildFallbackGtins(product)
   const hasCategory = product.category !== null
+  const [editingCategory, setEditingCategory] = useState(false)
+  const flatCategoryOptions = categoryOptions?.flatMap((g) => g.children) ?? []
+  // Once a run exists, any GTIN count beyond what it covered arrived after —
+  // the last row stands in for "which one," since identity isn't tracked.
+  const uncoveredGtin = onGtinAdded && hasUncoveredGtins(enrichmentResult, product.gtins)
 
   // Same count the Product List row showed, so drilling in doesn't lose the number.
   const summary = summarizeEnrichment(
@@ -124,14 +139,50 @@ export function ScreenGtinList({ code, codeDescription, product, enrichmentResul
             <dd className="font-semibold text-[#1a1f2e]">{product.description}</dd>
             <dt className="text-[#374151]">Category</dt>
             <dd>
-              {product.category ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="font-semibold text-[#166534]">{product.category.name}</span>
-                  <span className="text-[10px] font-mono text-[#9ca3af]">{product.category.brickCode}</span>
-                </span>
+              {editingCategory ? (
+                <select
+                  autoFocus
+                  defaultValue={product.category?.name ?? ""}
+                  onChange={(e) => {
+                    const picked = flatCategoryOptions.find((c) => c.name === e.target.value)
+                    if (picked) onChangeCategory?.(picked)
+                    setEditingCategory(false)
+                  }}
+                  onBlur={() => setEditingCategory(false)}
+                  className="px-2 py-1 text-[12px] border border-[#1a5fa6] rounded bg-white"
+                  aria-label={`Change category for ${product.id}`}
+                >
+                  <option value="" disabled>
+                    Choose a category…
+                  </option>
+                  {flatCategoryOptions.map((c) => (
+                    <option key={c.brickCode} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
-                  Not assigned
+                <span className="inline-flex items-center gap-1.5">
+                  {product.category ? (
+                    <>
+                      <span className="font-semibold text-[#166534]">{product.category.name}</span>
+                      <span className="text-[10px] font-mono text-[#9ca3af]">{product.category.brickCode}</span>
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-[#f3f4f6] text-[#6b7280]">
+                      Not assigned
+                    </span>
+                  )}
+                  {onChangeCategory && flatCategoryOptions.length > 0 && (
+                    <button
+                      onClick={() => setEditingCategory(true)}
+                      className="text-[#9ca3af] hover:text-[#1a5fa6] focus:outline-none"
+                      title={`Change category for ${product.id}`}
+                      aria-label={`Change category for ${product.id}`}
+                    >
+                      <Pencil className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                  )}
                 </span>
               )}
             </dd>
@@ -187,7 +238,19 @@ export function ScreenGtinList({ code, codeDescription, product, enrichmentResul
       <div className="bg-white border border-[#d1d5db] rounded overflow-hidden">
         <div className="px-4 py-2 border-b border-[#e5e7eb] flex items-center justify-between">
           <span className="text-[12px] text-[#1a5fa6] hover:underline cursor-pointer">Clear Filter</span>
-          <span className="text-[12px] text-[#6b7280]">1-{rows.length} of {rows.length} records</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] text-[#6b7280]">1-{rows.length} of {rows.length} records</span>
+            {onGtinAdded && (
+              <button
+                onClick={onGtinAdded}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-[#1a5fa6] border border-[#1a5fa6] rounded bg-white hover:bg-[#eff6ff] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
+                title="Simulate a new GTIN arriving for this product after enrichment already ran"
+              >
+                <Plus className="w-3 h-3" aria-hidden="true" />
+                Add GTIN
+              </button>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -209,12 +272,22 @@ export function ScreenGtinList({ code, codeDescription, product, enrichmentResul
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.gtin} className="border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors">
+              {rows.map((row, index) => {
+                const isUncoveredRow = uncoveredGtin && index === rows.length - 1
+                return (
+                <tr key={row.gtin} className={`border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors ${isUncoveredRow ? "bg-[#fffbeb]" : ""}`}>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="font-mono text-[#1a5fa6]">{row.gtin}</span>
                       <Copy className="w-3.5 h-3.5 text-[#9ca3af]" aria-hidden="true" />
+                      {isUncoveredRow && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fef3c7] text-[#92400e]"
+                          title="Added after the last enrichment run — not yet enriched"
+                        >
+                          Not yet enriched
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-[#374151]">{row.gtinType}</td>
@@ -230,7 +303,7 @@ export function ScreenGtinList({ code, codeDescription, product, enrichmentResul
                   <td className="px-3 py-2 text-[#6b7280]">{row.discontinueDate}</td>
                   <td className="px-3 py-2 text-right text-[#1a5fa6]">{row.images}</td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

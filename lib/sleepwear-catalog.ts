@@ -218,3 +218,90 @@ export const SLEEPWEAR_UNCLASSIFIED_PRODUCTS = [
 
 /** All category names a sleepwear product can be moved to. */
 export const SLEEPWEAR_AVAILABLE_CATEGORIES = SLEEPWEAR_CATEGORY_OPTIONS[0].children.map((c) => c.name)
+
+// ── Category Coverage detail ────────────────────────────────────────────────
+//
+// Single source of truth for the Category Coverage screen's numbers: 38 of 52
+// products already have categories, split across these three; six of the
+// remaining 14 are named so the coverage table isn't empty. Coherent with
+// screen-selection-code-list.tsx and screen-product-list.tsx — change one and
+// the others must follow.
+
+export interface CoverageAssignedGroup {
+  categoryName: string
+  brickCode: string
+  productCount: number
+}
+
+export const SLEEPWEAR_COVERAGE_ASSIGNED: CoverageAssignedGroup[] = [
+  { categoryName: "Night Dresses/Shirts",  brickCode: "10001339", productCount: 18 },
+  { categoryName: "Dressing Gowns",        brickCode: "10001338", productCount: 12 },
+  { categoryName: "Sleep Trousers/Shorts", brickCode: "10001341", productCount: 8 },
+]
+
+export interface CoverageUnassignedSample {
+  id: string
+  description: string
+  gtins: number
+}
+
+export const SLEEPWEAR_COVERAGE_UNASSIGNED_SAMPLES: CoverageUnassignedSample[] = [
+  { id: "S22041", description: "Silk nightgown collection",    gtins: 2 },
+  { id: "S22044", description: "Flannel pajama top",           gtins: 4 },
+  { id: "S22047", description: "Satin camisole set",           gtins: 2 },
+  { id: "S22051", description: "Jersey sleep dress",           gtins: 3 },
+  { id: "S22054", description: "Thermal henley nightshirt",    gtins: 2 },
+  { id: "S22058", description: "Waffle-knit robe",             gtins: 3 },
+]
+
+export interface CoverageScopeProduct {
+  id: string
+  description: string
+  gtins: number
+  category: { name: string; brickCode: string } | null
+  createDate: string
+}
+
+/**
+ * Full product list behind the Category Coverage screen's "Continue" button —
+ * the assigned products plus the ones that still need a category, so the
+ * review screen that follows can show both instead of an unscoped whole-code
+ * run. Real curated products fill in first; anything past that is a numbered
+ * synthetic entry, same pattern as buildFallbackRows in screen-product-list.tsx.
+ */
+export function buildCoverageReviewScope(assignedCount: number, unassignedCount: number): CoverageScopeProduct[] {
+  const weights = SLEEPWEAR_COVERAGE_ASSIGNED.map((g) => g.productCount)
+  const counts = distributeProducts(assignedCount, weights)
+
+  let seq = 1
+  const nextId = () => `S22${String(100 + seq++).padStart(3, "0")}`
+
+  const assigned: CoverageScopeProduct[] = SLEEPWEAR_COVERAGE_ASSIGNED.flatMap((group, i) => {
+    const brick = SLEEPWEAR_BRICKS.find((b) => b.brickCode === group.brickCode)
+    const pool = (brick && SLEEPWEAR_PRODUCTS_BY_CATEGORY[brick.id]) ?? []
+    return Array.from({ length: counts[i] }, (_, j) => {
+      const base = pool.length > 0 ? pool[j % pool.length] : null
+      const pass = pool.length > 0 ? Math.floor(j / pool.length) : 0
+      return {
+        id: nextId(),
+        description: base ? (pass === 0 ? base.product : `${base.product} (${pass + 1})`) : `${group.categoryName} item ${j + 1}`,
+        gtins: base?.gtins ?? 3,
+        category: { name: group.categoryName, brickCode: group.brickCode },
+        createDate: "04/07/2021",
+      }
+    })
+  })
+
+  const unassigned: CoverageScopeProduct[] = Array.from({ length: unassignedCount }, (_, i) => {
+    const sample = SLEEPWEAR_COVERAGE_UNASSIGNED_SAMPLES[i]
+    return {
+      id: sample?.id ?? nextId(),
+      description: sample?.description ?? `Unclassified sleepwear item ${i + 1}`,
+      gtins: sample?.gtins ?? 2,
+      category: null,
+      createDate: "05/28/2026",
+    }
+  })
+
+  return [...assigned, ...unassigned]
+}
