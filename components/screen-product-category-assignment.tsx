@@ -5,6 +5,7 @@ import { Sparkles, CheckCircle2, ChevronDown, Info, AlertTriangle, ArrowRight, H
 import type { CategoryOptionGroup, CategoryAssignment } from "@/components/screen-individual-assignment"
 import { suggestCategory, LOW_CONFIDENCE_THRESHOLD, type CategorySuggestion } from "@/lib/category-suggestion"
 import { PhaseTag } from "@/components/phase-tag"
+import { SaveAndExitDialog } from "@/components/save-and-exit-dialog"
 
 // AI category assignment for the products in an enrichment scope.
 //
@@ -77,6 +78,7 @@ export function ScreenProductCategoryAssignment({
   // Snapshot of what was already confirmed before the batch action, so undo
   // restores exactly that — matching the brick confirmation screen's behaviour.
   const [preBatchSnapshot, setPreBatchSnapshot] = useState<Set<string> | null>(null)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const confident = rows.filter((r) => r.suggestion && r.suggestion.confidence >= LOW_CONFIDENCE_THRESHOLD)
   const uncertain = rows.filter((r) => r.suggestion && r.suggestion.confidence < LOW_CONFIDENCE_THRESHOLD)
@@ -272,7 +274,7 @@ export function ScreenProductCategoryAssignment({
           </button>
           {onSaveAndExit && (
             <button
-              onClick={() => onSaveAndExit(assignments)}
+              onClick={() => setShowExitConfirm(true)}
               disabled={assignments.length === 0}
               className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -301,6 +303,17 @@ export function ScreenProductCategoryAssignment({
           </div>
         </div>
       </div>
+
+      {showExitConfirm && onSaveAndExit && (
+        <SaveAndExitDialog
+          productCount={assignments.length}
+          onCancel={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false)
+            onSaveAndExit(assignments)
+          }}
+        />
+      )}
     </div>
   )
 }

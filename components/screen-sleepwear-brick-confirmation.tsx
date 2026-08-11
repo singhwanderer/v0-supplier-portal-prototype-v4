@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { CheckCircle2, ArrowRight, Info, HelpCircle, ListChecks, AlertTriangle } from "lucide-react"
 import type { ConfirmedCategory } from "@/app/page"
 import type { BrickConfirmationSource } from "@/components/screen-brick-confirmation"
+import { SaveAndExitDialog } from "@/components/save-and-exit-dialog"
 import {
   SLEEPWEAR_BRICKS,
   SLEEPWEAR_LOW_CONFIDENCE_BRICKS,
@@ -83,6 +84,7 @@ export function ScreenSleepwearBrickConfirmation({
   const [batchConfirmed, setBatchConfirmed] = useState(false)
   const [preConfirmAllSnapshot, setPreConfirmAllSnapshot] = useState<Set<string>>(new Set())
   const [selectedEnrichId, setSelectedEnrichId] = useState<string | null>(null)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const highConfidenceCategories = categories.filter((c) => c.confidence >= 70)
   const lowConfidenceCategories = categories.filter((c) => c.confidence < 70 && c.confidence > 0)
@@ -147,6 +149,16 @@ export function ScreenSleepwearBrickConfirmation({
 
   const handleEnrichAll = () => {
     onProceedToEnrichment(confirmedList.map(toConfirmedCategory))
+  }
+
+  const saveAndExit = () => onSaveAndExit(confirmedList.map(toConfirmedCategory))
+
+  const handleExitClick = () => {
+    if (confirmedCount > 0) {
+      setShowExitConfirm(true)
+    } else {
+      saveAndExit()
+    }
   }
 
   return (
@@ -441,7 +453,7 @@ export function ScreenSleepwearBrickConfirmation({
           </button>
           <div>
             <button
-              onClick={() => onSaveAndExit(confirmedList.map(toConfirmedCategory))}
+              onClick={handleExitClick}
               className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             >
               {confirmedCount > 0 ? "Save & Return to List" : "Exit to Selection Code List"}
@@ -491,6 +503,17 @@ export function ScreenSleepwearBrickConfirmation({
           )}
         </div>
       </div>
+
+      {showExitConfirm && (
+        <SaveAndExitDialog
+          productCount={totalConfirmedProducts}
+          onCancel={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false)
+            saveAndExit()
+          }}
+        />
+      )}
     </div>
   )
 }
