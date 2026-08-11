@@ -1,9 +1,9 @@
 # Phase 2 User Stories — Selection Code 002 Onward
 
 Story set for the coverage-aware, product-level, resumable enrichment flow prototyped
-for Selection Code **002 (Sleepwear)**. Written against the running prototype, not the
-original `PHASE_2_REQUIREMENTS.md` draft, and kept current with it directly as the
-prototype evolves.
+for Selection Code **002 (Sleepwear)**. Written directly against the running prototype
+and kept current with it as the prototype evolves — this is the single source of truth
+for the flow's user-facing behavior; there is no separate requirements document.
 
 These stories describe **user-facing behavior only**. Anyone building the real,
 production version of this feature will not have this prototype's source open next to
@@ -58,8 +58,8 @@ Two areas carry these markings now: true GTIN-level attribute value storage (P2-
 P2-015 — values are still recorded per product, with a per-product GTIN-coverage count
 underneath as a partial stand-in), and classification appearing as a fourth
 missing-attribute reason on Enrichment Detail (P2-011 — a deliberate omission, not a
-gap; see that story for why). The review screen's handling of unclassified products and
-classification as attribute #1 are both built and unmarked below.
+gap; see that story for why). Classification as attribute #1 is built and unmarked
+below.
 
 ### How AI shows up in this flow
 
@@ -89,15 +89,16 @@ consequences run through the stories below:
 
 This reframes the categorized/uncategorized split that runs through the flow. The
 difference between a code's 38 categorized and 14 uncategorized products is **where each
-product is in the sequence**, not whether it is eligible to be worked on. Both halves are
-in scope for enrichment; the uncategorized half simply has attribute #1 outstanding.
+product is in the sequence**, not a judgment about the uncategorized half — it simply
+hasn't reached attribute #1 yet.
 
-This only surfaces on the review screen when a product without a settled classification
-actually reaches it — today that's the Category Coverage → Continue path, which carries
-its uncategorized half forward on purpose. The whole-code and product-drill-down paths
-both force classification to be resolved before a product ever reaches attribute
-review, so a reader working from those entry points won't see a Classification row at
-all; that's expected, not a gap.
+That difference is never visible on the review screen itself. Every path — Category
+Coverage, Brick Confirmation, and the product-drill-down path alike — resolves
+classification before a product ever reaches attribute review. There is no entry point
+where an unclassified product shows up there; a reader working from any of them won't
+see a Classification row on the review screen at all. Category Coverage does its own
+resolving (see story 2) rather than deferring it — a product only leaves that screen
+once it has a category, the same rule every other path follows.
 
 Everything AI proposes is shown as a suggestion, never written to the product, until the
 supplier takes an explicit confirming action. Category suggestions and attribute-value
@@ -129,12 +130,12 @@ engineer can hold in their head as "what this screen does," not an atomized chec
 | # | Screen | Role |
 |---|---|---|
 | 1 | Selection Code List | Entry point — every selection code's coverage and status |
-| 2 | Category Coverage | Categorized vs. uncategorized split for one code |
+| 2 | Category Coverage | Categorized vs. uncategorized split for one code, plus inline AI category confirmation for whatever isn't categorized yet |
 | 3 | Product List | Product-level detail, eligibility, and scope selection |
 | 4 | GTIN List | GTIN-level detail within one product |
 | 5 | Product Category Assignment | AI proposes categories for uncategorized products |
 | 6 | Individual Assignment | Manual category assignment, bulk or one at a time |
-| 7 | Brick Confirmation | Confirm AI's proposed category groupings |
+| 7 | Brick Confirmation | Confirm AI's proposed category groupings (whole-code entry, and the product-drill-down path — not reached from Category Coverage) |
 | 8 | Brick GTIN List | Products behind one confirmed category |
 | 9 | AI Enrichment Review | Attribute-by-attribute review — reviewing suggestions |
 | 10 | AI Enrichment Review | Attribute-by-attribute review — completing and resuming |
@@ -191,96 +192,94 @@ without hunting for the right link.
 
 ## 2. Category Coverage
 
-### P2-002 — See the categorized/uncategorized split, proceed to enrichment without resolving it first
+### P2-002 — See the categorized/uncategorized split, confirm AI's category proposals for what's left, right here
 
 **User story**
 As a Supplier data manager, I want to see which of a code's products already have
-categories and which don't, and proceed straight into attribute review for the whole
-code — resolving any remaining classifications inline once I'm there — so that I can
-choose where to focus without redoing settled work or being blocked by the products
-that aren't ready yet.
+categories, confirm AI's proposed categories for whatever doesn't — right here, without
+a detour to a separate screen — and proceed into attribute review with however much of
+the code I've actually resolved, so that I can clear categorization at my own pace
+without losing work I haven't gotten to yet.
 
 **Acceptance criteria**
 
-*Viewing the split*
+*Viewing the assigned split*
 - Given I open Category Coverage for a partially-covered code, when it loads, then I see
   a summary card with the categorized and uncategorized counts, a two-tone progress bar,
-  and a percentage covered.
+  and a percentage covered. These numbers are **live** — they update immediately as I
+  confirm category proposals below, without leaving the screen.
 - Given the same screen, when I look at the assigned section, then the already-assigned
   products are grouped into cards by category, each captioned as keeping its existing
-  category with no AI involved. The cards are a read-only summary *on this screen* — they
-  group and count, they don't offer editing here.
+  category with no AI involved.
 - Given those cards, when I consider what they imply about the products in them, then
   nothing about them is locked: a product's attribute values remain editable at any time
   through the normal enrichment and detail screens, and its category can still be
   changed. The "no AI involved" caption describes how these products got their category,
   not a restriction on what can be done to them afterward.
-- Given the same screen, when I look at the unassigned section, then I see a distinct
-  panel naming how many products don't have a category yet, a sample of them, and a
-  note that attributes can only be enriched once a product has a category.
 - Given I instead open Category Coverage for a fully-covered code, when it loads, then I
-  see a confirmation that every product already has a category and no unassigned section
-  at all.
-- Given this screen, then there is no separate action for launching AI category
-  assignment against just the uncategorized gap — resolving those products' categories
-  happens inline once inside attribute review, not as a detour back through a category
-  assignment screen.
+  see a confirmation that every product already has a category, and no category
+  proposals to review at all.
+
+*Confirming AI's category proposals*
+- Given the same screen, when I look at the unassigned area, then in place of a static
+  list I see AI's proposed category groupings for those products — the same style of
+  cards Brick Confirmation uses: high-confidence cards (70% or above) with a confidence
+  bar, an evidence line, and "Confirm Category"; a "Help us confirm the product type"
+  cluster of lower-confidence cards, each carrying a "Needs review" badge; and, when AI
+  found no match at all for some products, a "Could not classify" card with an "Assign
+  Individually" action.
+- Given a high- or low-confidence card, when I click "Confirm Category", then its
+  products move out of this area and into the assigned section above. If an assigned
+  card already exists for that GS1 category, its count grows by the confirmed amount
+  (e.g. 18 → 22); if not, a new assigned card appears for it.
+- Given two separate proposed cards for the *same* category (say, one high-confidence and
+  one low-confidence, both "Night Dresses/Shirts"), when I confirm both, one after the
+  other, then they both fold into the same assigned card — its count reflects both
+  confirmations, not two separate cards.
+- Given several unconfirmed cards, when I click "Confirm All Categories", then every card
+  at 70% confidence or above is confirmed at once and folds into the assigned section;
+  lower-confidence and unclassifiable cards are left untouched. A matching "Undo Confirm
+  All" restores exactly the state from before I clicked it.
+- Given the "Could not classify" card, when I click "Assign Individually", then I'm taken
+  to Individual Assignment scoped to just those products — the same escape hatch Brick
+  Confirmation offers. A "review all low-confidence products individually" link offers
+  the same hand-off for every card below 70%, not just the unclassified one.
 
 *Proceeding to enrichment*
-- Given a code with, say, 38 of 52 products categorized, when I click "Continue to
-  Attribute Enrichment (52 products)", then I'm taken into attribute review and **all 52
-  products appear there**. The button's count is the full product count in scope, the
-  same number the review screen itself shows — not a count of just the classified
-  products.
-  - UI: button label reads `Continue to Attribute Enrichment ({total} products)` where
-    `{total}` is the code's whole product count, categorized and uncategorized combined.
-- Given I read that button before clicking it, then it's clear that I am not required to
-  resolve the remaining 14 first. **Categorized** (classification settled) and
-  **enriched** (remaining attribute values filled in) are sequential steps; this action
-  only requires the first to have happened for *some* products, not all.
-- Given a code with zero categorized products, when I look at this button, then it's
-  disabled — there's nothing yet to proceed to enrichment with.
+- Given a code with 38 of 52 products categorized and I confirm proposals covering 10 of
+  the remaining 14, when I look at "Continue to Attribute Enrichment", then its label
+  reads the **live** assigned total — `Continue to Attribute Enrichment (48 products)` —
+  not the code's fixed whole-code count.
+- Given some proposals are left unconfirmed when I click Continue, then those products
+  are **not** carried into the run. They simply remain part of this code's uncategorized
+  remainder for a future visit to this same screen — nothing is force-completed, and
+  nothing already confirmed is lost.
+- Given I click Continue, then I land on the plain attribute review screen for this code
+  — the same kind of review Footwear reaches after its own Brick Confirmation. It is not
+  scoped to only the products I just confirmed, and it has no separate "needs
+  classification" section, because every product reaching it already has a category by
+  the time I leave this screen.
+- Given a code with zero categorized products and nothing confirmed yet, when I look at
+  this button, then it's disabled — there's nothing yet to proceed to enrichment with.
 
-*How the review screen splits the two halves*
-- Given I continue to enrichment from a partially-covered code, when the review screen
-  loads, then the 38 classified products and the 14 unclassified ones appear in **two
-  distinct sections**, so I can see at a glance which half is which. The two sections are
-  a labeled divider row within the same attribute table rather than two separate
-  tables or panels — one table, two clearly headed zones.
-  - UI: a full-width divider row reading something like "Needs classification" opens the
-    unclassified group, followed later by a second divider ("Attribute review") opening
-    the classified group, inside one continuous attribute table.
-- Given the classified section, then those products receive AI attribute suggestions
-  across their category's full attribute set, exactly as they would on a fully-covered
-  code.
-- Given the unclassified section, then each product shows a **proposed classification I
-  can change inline** — I don't have to leave this screen and run a separate category
-  assignment pass to resolve them.
-- Given a product in the unclassified section, when I look at its other attributes, then
-  none are suggested yet: until its classification is settled, AI has no attribute set to
-  suggest against. Resolving the classification is what unblocks the rest.
-- Given I settle a product's classification here, when it's confirmed, then that product
-  joins the classified half and its remaining attributes become available to review in
-  the same run.
-- Given a classified product that has never been enriched, when I look at it, then it
-  shows its category's full attribute set at zero filled — ready to enrich, not an error
-  state.
-
-*Leaving without changing anything*
-- Given I'm viewing this screen, when I click Back or Exit, then I return to wherever I
+*Leaving this screen*
+- Given nothing confirmed this visit, when I click "← Back", then I return to wherever I
   came from with the code's coverage and status exactly as they were.
+- Given I've confirmed at least one proposal, when I look at the exit action, then it
+  reads "Save & Return to List" and keeps those confirmations — the code's coverage
+  reflects them immediately on the Selection Code List, without requiring a trip through
+  attribute review. With nothing confirmed, the same action reads "Exit to Selection Code
+  List" and makes no coverage change.
 
 **Anti-criteria**
-- Given I proceed to enrichment from a partially-covered code, when the review screen
-  loads, then the unclassified products must not be hidden from it. They are at an
-  earlier point in the same sequence, not excluded from the run.
-- Given those unclassified products are on screen, then they must not receive AI
-  suggestions for anything beyond their classification, and must not count toward
-  "products enriched" until their classification is settled — visible is not the same as
-  processed.
-- Given I open this screen and leave without clicking either action, when I return to
-  the Selection Code List, then that code's coverage and status must not have changed at
-  all.
+- Given I click Continue with proposals still unconfirmed, when the review screen loads,
+  then those unconfirmed products must **not** appear in it — the review screen is
+  today's confirmed set only, not the whole code.
+- Given I confirm a proposal for a category that already has an assigned card, when I
+  check the assigned section, then it must not create a second card for the same GS1
+  category — same brick code always merges into one card.
+- Given I leave this screen via plain Back with nothing confirmed, when I return to the
+  Selection Code List, then that code's coverage and status must not have changed at all.
 
 ---
 
@@ -532,6 +531,11 @@ low-confidence products either all at once or one at a time, save whatever I've 
 far, and be stopped from continuing until everything's resolved, so that I can clear a
 backlog efficiently without losing partial work or accidentally proceeding with gaps.
 
+This screen has two entry points: Brick Confirmation's escape hatches (story 7), and
+Category Coverage's "Could not classify" card and "review all low-confidence products
+individually" link (story 2) for the code-level entry path. Both land here the same way
+— the acceptance criteria below don't distinguish which one brought a supplier here.
+
 **Acceptance criteria**
 
 *Assigning*
@@ -691,24 +695,6 @@ every value.
   shows green as complete.
 - Given a badge's state, when the screen re-renders without me doing anything, then that
   state doesn't change on its own.
-
-*Products whose classification isn't settled yet*
-- Given I entered this screen from a partially-covered code, when it renders, then
-  products without a settled classification appear in their own section, visually
-  separate from the products AI is suggesting attribute values for. That separation is a
-  labeled divider row inside the same attribute table rather than a physically distinct
-  table or panel — one continuous table, two clearly headed zones.
-  - UI: a full-width divider row opens each zone within the one attribute table, the
-    same treatment described on Category Coverage's Continue action.
-- Given that section, when I look at a product in it, then it shows a proposed
-  classification with the same confirm/edit/reject actions every other suggestion gets —
-  classification is reviewed here as an attribute, not as a detour to another screen.
-- Given a product in that section, when I look for its other attributes, then there are
-  none to review yet: its attribute set isn't known until its category is. The section
-  makes that dependency visible rather than leaving the products looking merely empty.
-- Given I confirm a product's classification, when the screen updates, then that product
-  moves into the main section and its remaining attributes become reviewable in this same
-  run, without restarting.
 
 *Reviewing per-product detail*
 - Given a collapsed attribute row, when I click it, then it expands into one row per
@@ -893,29 +879,36 @@ review flow.
 
 ## 12. Cross-cutting: entering enrichment and knowing where you are
 
-### P2-012 — Track whether I entered enrichment for a whole code or a specific selection
+### P2-012 — Track which entry path I took, so step labels and back navigation match what I actually did
 
 **User story**
 As a Supplier data manager, I want the app to correctly track whether I entered
-enrichment via the whole-code path or by selecting specific products in the drill-down,
-so that step counts and back navigation match what I actually did.
+enrichment via a code-level action or by selecting specific products in the drill-down,
+so that the step indicator's content and Back navigation match what I actually did, even
+though the step *count* is the same either way.
 
 **Acceptance criteria**
-- Given I enter enrichment for a code via its whole-code action on the Selection Code
-  List, when I check the step indicator through the flow, then it counts three steps —
-  category coverage, category confirmation, attribute review.
-- Given I instead enter enrichment via a specific product selection from the Product
-  List drill-down, when I check the step indicator, then it counts two steps — category
-  assignment, attribute review — since the scoped path skips the coverage screen
-  entirely.
-- Given the whole-code path, when I click Back partway through, then I return toward
-  Category Coverage or the Selection Code List; given the scoped path, when I click Back,
-  then I return toward the Product List — the two paths never share a back target at the
-  same step.
+- Given any entry path — a code-level action from the Selection Code List (whether it
+  lands on Category Coverage or goes straight to Brick Confirmation) or a scoped
+  selection from the Product List drill-down — when I check the step indicator, then it
+  always counts two steps: a categorization step, then attribute review. There is no
+  entry path that counts three steps; what differs between paths is which screen fills
+  step one, not how many steps there are.
+- Given a code-level entry for a partially- or fully-covered code, when I check step one,
+  then it's Category Coverage; given a code-level entry for a code with nothing assigned,
+  or a scoped drill-down selection, then step one is Brick Confirmation or Product
+  Category Assignment respectively — whichever screen actually does the categorizing for
+  that path.
+- Given a code-level entry, when I click Back from the attribute review screen, then I
+  return to the Selection Code List — categorization for that path is already settled by
+  the time review is reached, so there's no coverage screen left to step back into.
+  Given the scoped drill-down path instead, when I click Back from review, then I return
+  toward the Product List.
 
 **Anti-criteria**
-- Given I took the scoped (drill-down) path, when I reach the review screen, then it must
-  not claim a step count that implies a coverage step it never had.
+- Given any entry path, when I reach the review screen, then it must not claim a step
+  count other than two, and must not label step one with a screen that path didn't
+  actually visit.
 
 ---
 
