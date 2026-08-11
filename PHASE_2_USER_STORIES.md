@@ -503,8 +503,12 @@ that every product ends up with a category I've explicitly signed off on.
 
 *Saving or continuing*
 - Given I've confirmed at least one product, when I click "Save & Return to List", then
-  my confirmed assignments are kept and I return to the Product List, with anything
-  unconfirmed left uncategorized; with nothing confirmed, this action is disabled.
+  a confirmation dialog appears first — explaining that confirmed categories' GPC
+  classification is sent to the catalogue and will still be there when I come back —
+  and only "Save & Exit" in that dialog keeps my confirmed assignments and returns me
+  to the Product List, with anything unconfirmed left uncategorized; "Continue
+  Enrichment" dismisses the dialog and leaves me on this screen unchanged. With nothing
+  confirmed, the button is disabled and no dialog appears.
 - Given every product in scope is resolved (confirmed, or was already categorized), when
   I look at "Continue to Attribute Enrichment", then it's enabled; with anything still
   unresolved, it's disabled and shows how many remain.
@@ -544,10 +548,14 @@ backlog efficiently without losing partial work or accidentally proceeding with 
   its current state.
 
 *Saving or continuing*
-- Given I've assigned at least one product, when I click "Save & Return to List", then
-  my assignments are kept and I return to the Product List, with a note stating how many
-  products remain unresolved and stay flagged as needing a category; with nothing
-  assigned, this action is disabled.
+- Given I've assigned at least one product, when I click "Save & Return to List", then a
+  confirmation dialog appears first — explaining that confirmed categories' GPC
+  classification is sent to the catalogue and will still be there when I come back —
+  and only "Save & Exit" in that dialog keeps my assignments and returns me to the
+  Product List, with a note stating how many products remain unresolved and stay
+  flagged as needing a category; "Continue Enrichment" dismisses the dialog and leaves
+  me on this screen unchanged. With nothing assigned, the button is disabled and no
+  dialog appears.
 - Given this screen was reached as a step feeding directly into enrichment, when
   anything remains unassigned, then "Continue to Enrichment" is disabled with an
   explanation; once every product is assigned, it becomes available.
@@ -611,11 +619,16 @@ attribute work, so that nothing gets stuck and I control the pace.
 
 *Saving and exiting*
 - Given I've confirmed at least one category, when I click the exit action, then it's
-  labeled "Save & Return to List" and keeps the confirmed categories — the next time I
+  labeled "Save & Return to List", and clicking it opens a confirmation dialog first —
+  explaining that the confirmed categories' GPC classification is sent to the catalogue
+  and will still be there next time I open enrichment — before anything is saved.
+  "Continue Enrichment" dismisses the dialog and leaves me on this screen unchanged;
+  only "Save & Exit" in that dialog keeps the confirmed categories — the next time I
   view this code's coverage, those products show up as newly covered, added on top of
   whatever coverage already existed, not replacing it.
 - Given I've confirmed nothing, when I click the same exit action, then it's labeled
-  "Exit to Selection Code List" and makes no coverage change.
+  "Exit to Selection Code List" and exits immediately with no dialog and no coverage
+  change.
 
 **Anti-criteria**
 - Given I save with only some categories confirmed, when I check this code's coverage
