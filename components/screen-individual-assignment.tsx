@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { ArrowLeft, ChevronDown, Check } from "lucide-react"
+import { SaveAndExitDialog } from "@/components/save-and-exit-dialog"
 
 // Bug 3 fix: Individual product assignment screen for unclassified products
 
@@ -142,6 +143,7 @@ export function ScreenIndividualAssignment({
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState<string>("")
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const remainingCount = products.filter(p => p.category === "Unassigned").length
   const assignedCount = products.length - remainingCount
@@ -347,7 +349,7 @@ export function ScreenIndividualAssignment({
           {onSaveAndExit && (
             <div className="text-right">
               <button
-                onClick={() => onSaveAndExit(assignedCount, products.length, assignments)}
+                onClick={() => setShowExitConfirm(true)}
                 disabled={assignedCount === 0}
                 className="px-4 py-2 text-[13px] font-semibold border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -382,6 +384,17 @@ export function ScreenIndividualAssignment({
           )}
         </div>
       </div>
+
+      {showExitConfirm && onSaveAndExit && (
+        <SaveAndExitDialog
+          productCount={assignedCount}
+          onCancel={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false)
+            onSaveAndExit(assignedCount, products.length, assignments)
+          }}
+        />
+      )}
     </div>
   )
 }

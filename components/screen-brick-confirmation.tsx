@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { CheckCircle2, ArrowRight, Info, HelpCircle, ArrowLeft, ListChecks, AlertTriangle } from "lucide-react"
 import type { ConfirmedCategory } from "@/app/page"
+import { SaveAndExitDialog } from "@/components/save-and-exit-dialog"
 
 interface BrickCategory {
   id: string
@@ -73,6 +74,8 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
   const [preConfirmAllSnapshot, setPreConfirmAllSnapshot] = useState<Set<string>>(new Set())
   // Track which single category the user has selected to enrich (so it can be unselected)
   const [selectedEnrichId, setSelectedEnrichId] = useState<string | null>(null)
+  // Scenario 3: confirm before exiting once something was actually confirmed
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   // Separate high-confidence and low-confidence categories for display
   const highConfidenceCategories = categories.filter((c) => c.confidence >= 70 || c.enriched)
@@ -161,6 +164,21 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
   const handleReviewAllIndividually = () => {
     if (onAssignIndividually) {
       onAssignIndividually("all-low-confidence", totalLowConfidenceProducts)
+    }
+  }
+
+  // Scenario 3: exit without enriching — confirmed categories are saved, not discarded
+  const saveAndExit = () => {
+    onSaveAndExit(
+      confirmedList.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, gtinCount: c.gtinCount, confidence: c.confidence, brickCode: c.brickCode }))
+    )
+  }
+
+  const handleExitClick = () => {
+    if (confirmedCount > 0) {
+      setShowExitConfirm(true)
+    } else {
+      saveAndExit()
     }
   }
 
@@ -478,14 +496,9 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
           >
             &#8592; Previous
           </button>
-          {/* Scenario 3: exit without enriching — confirmed categories are saved, not discarded */}
           <div>
             <button
-              onClick={() =>
-                onSaveAndExit(
-                  confirmedList.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, gtinCount: c.gtinCount, confidence: c.confidence, brickCode: c.brickCode }))
-                )
-              }
+              onClick={handleExitClick}
               className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             >
               {confirmedCount > 0 ? "Save & Return to List" : "Exit to Selection Code List"}
@@ -537,6 +550,17 @@ export function ScreenBrickConfirmation({ fileName, totalGtinCount, totalProduct
           )}
         </div>
       </div>
+
+      {showExitConfirm && (
+        <SaveAndExitDialog
+          productCount={totalConfirmedProducts}
+          onCancel={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false)
+            saveAndExit()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { CheckCircle2, ArrowRight, Info, HelpCircle, ListChecks, AlertTriangle } from "lucide-react"
 import type { ConfirmedCategory } from "@/app/page"
+import { SaveAndExitDialog } from "@/components/save-and-exit-dialog"
 import {
   SLEEPWEAR_BRICKS,
   SLEEPWEAR_LOW_CONFIDENCE_BRICKS,
@@ -94,6 +95,7 @@ export function ScreenSleepwearCategoryCoverage({
   const [categories, setCategories] = useState<SleepwearCategory[]>(initialCategories)
   const [batchConfirmed, setBatchConfirmed] = useState(false)
   const [preConfirmAllSnapshot, setPreConfirmAllSnapshot] = useState<Set<string>>(new Set())
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   // Confirmed proposals fold into the assigned list by brick code — an existing
   // card's count grows in place, or a new card appears if the brick isn't
@@ -162,6 +164,14 @@ export function ScreenSleepwearCategoryCoverage({
   const allConfirmable = categories.filter((c) => c.confidence >= 70).length
   const allConfirmed = allConfirmable > 0 && unconfirmedHighConfidence.length === 0
 
+  const handleExitClick = () => {
+    if (sessionConfirmedCount > 0) {
+      setShowExitConfirm(true)
+    } else {
+      onSaveAndExit(toConfirmedCategories(), sessionConfirmedCount)
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* Source banner */}
@@ -229,18 +239,15 @@ export function ScreenSleepwearCategoryCoverage({
 
       {/* Categorization — replaces the old static "don't have a category" list */}
       {!allCovered && (
-        <div className="rounded-lg border-2 border-dashed border-[#f59e0b] bg-[#fffbeb] p-4 space-y-4">
-          <div className="flex items-start gap-2">
-            <HelpCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
-                {liveUnassignedCount} {liveUnassignedCount === 1 ? "product" : "products"} still need a category
-              </h3>
-              <p className="text-[12px] text-[#6b7280] mt-0.5">
-                We read your product descriptions and grouped them into sleepwear categories. Confirm a group and its
-                products move into the assigned list above.
-              </p>
-            </div>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-[14px] font-semibold text-[#1a1f2e]">
+              {liveUnassignedCount} {liveUnassignedCount === 1 ? "product" : "products"} still need a category
+            </h3>
+            <p className="text-[12px] text-[#6b7280] mt-0.5">
+              We read your product descriptions and grouped them into sleepwear categories. Confirm a group and its
+              products move into the assigned list above.
+            </p>
           </div>
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -308,11 +315,14 @@ export function ScreenSleepwearCategoryCoverage({
 
           {/* Low-confidence + unclassifiable */}
           {(unconfirmedLowConfidence.length > 0 || unclassifiableCategory) && (
-            <div className="rounded border border-[#fde68a] bg-white/60 p-3 space-y-3">
-              <p className="text-[13px] font-semibold text-[#92400e]">
-                Help us confirm the product type — {totalLowConfidenceProducts}{" "}
-                {totalLowConfidenceProducts === 1 ? "Product" : "Products"} remaining
-              </p>
+            <div className="rounded-lg border-2 border-dashed border-[#f59e0b] bg-[#fffbeb] p-4 space-y-4">
+              <div className="flex items-start gap-2">
+                <HelpCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#92400e]" aria-hidden="true" />
+                <h3 className="text-[13px] font-semibold text-[#92400e]">
+                  Help us confirm the product type — {totalLowConfidenceProducts}{" "}
+                  {totalLowConfidenceProducts === 1 ? "Product" : "Products"} remaining
+                </h3>
+              </div>
               <div className="grid gap-3">
                 {unconfirmedLowConfidence.map((cat) => (
                   <div key={cat.id} className="rounded border p-4 bg-white border-[#fcd34d] transition-colors">
@@ -410,7 +420,7 @@ export function ScreenSleepwearCategoryCoverage({
           </button>
           {onExit && (
             <button
-              onClick={() => onSaveAndExit(toConfirmedCategories(), sessionConfirmedCount)}
+              onClick={handleExitClick}
               className="px-3 py-1.5 text-[13px] font-medium border border-[#d1d5db] rounded bg-white text-[#374151] hover:bg-[#f3f4f6] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fa6]"
             >
               {sessionConfirmedCount > 0 ? "Save & Return to List" : "Exit to Selection Code List"}
@@ -454,6 +464,17 @@ export function ScreenSleepwearCategoryCoverage({
           </button>
         </div>
       </div>
+
+      {showExitConfirm && (
+        <SaveAndExitDialog
+          productCount={sessionConfirmedCount}
+          onCancel={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false)
+            onSaveAndExit(toConfirmedCategories(), sessionConfirmedCount)
+          }}
+        />
+      )}
     </div>
   )
 }
